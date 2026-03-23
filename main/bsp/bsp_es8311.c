@@ -14,6 +14,8 @@
 #include "freertos/event_groups.h"
 #include <math.h>
 
+#include "bsp_enc_dec.h"
+
 static const char *TAG = "bsp_es8311";
 
 static i2s_chan_handle_t es8311_i2s_tx_handle = NULL;
@@ -28,7 +30,6 @@ static esp_err_t bsp_8311_i2s_init(void);
 
 extern const uint8_t pcm_start[] asm("_binary_music_pcm_start");
 extern const uint8_t pcm_end[]   asm("_binary_music_pcm_end");
-
 
 
 #define EXAMPLE_BUFF_SIZE 2024
@@ -127,7 +128,7 @@ esp_err_t bsp_8311_write(void *buffer,int len)
     }
     return ESP_OK;  
 }
-//录音播放测试
+//录音播放原始音频测试
 esp_err_t bsp_8311_record_play_test(void)
 {
     int16_t *i2s_read_buffer = heap_caps_malloc(1024*2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -143,6 +144,49 @@ esp_err_t bsp_8311_record_play_test(void)
          }
     }
     free(i2s_read_buffer);
+    return ESP_FAIL;
+  
+}
+//录音播放加解压缩测试
+esp_err_t bsp_8311_record_play_opus_test(void)
+{
+    int16_t *i2s_read_buffer = heap_caps_malloc(640*4, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    int16_t *opus_buffer=heap_caps_malloc(640*4, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    int16_t *dec_buffer=heap_caps_malloc(640*4, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    uint32_t opus_len=0;
+    uint32_t pcm_len=0;
+    while(1)
+    {
+         esp_err_t ret = bsp_8311_read(i2s_read_buffer, 640*4);
+        if(ret!=ESP_OK)
+         {
+            ESP_LOGE(TAG,"read fail");
+         }
+         else{
+            bsp_enc_dec_encode(i2s_read_buffer,640*4,opus_buffer,640*4,&opus_len);
+            for(uint8_t i=0;i<4;i++)
+            {
+                bsp_enc_dec_decode(opus_buffer+i*64,128,dec_buffer+i*320,640,&pcm_len); //这里的64本质是128/2，因为指针用的16位
+            }
+            //bsp_enc_dec_decode(opus_buffer,128,dec_buffer,640*4,&pcm_len);
+            ESP_LOGI(TAG,"pcm_len:%d,opus:%d",pcm_len,opus_len);
+            for(int i=0;i<pcm_len*4;i++)
+            {
+                int32_t amplified = dec_buffer[i]*4;
+        
+                // 限幅处理，防止削波
+                if (amplified > 32767) amplified = 32767;
+                if (amplified < -32768) amplified = -32768;
+                
+                dec_buffer[i] = (int16_t)amplified;
+            }
+             bsp_8311_write(dec_buffer,pcm_len*4);
+         }
+
+    }
+    free(i2s_read_buffer);
+    free(opus_buffer);
+    free(dec_buffer);
     return ESP_FAIL;
   
 }

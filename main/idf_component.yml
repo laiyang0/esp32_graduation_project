@@ -20,3 +20,4 @@ dependencies:
 
   espressif/esp32-camera: ^2.1.5
   esp_mmap_assets: 1.*    #用于工程分区建立的组件
+

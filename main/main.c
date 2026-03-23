@@ -19,9 +19,11 @@
 #include "esp_audio_enc.h"
 #include "esp_codec_dev_defaults.h"
 #include "esp_spiffs.h"
+
 #include "bsp_es8311.h"
 #include "bsp_lcd.h"
 #include "bsp_ov3660.h"
+#include "bsp_enc_dec.h"
 
 #include <dirent.h>
 #include <sys/stat.h>   // 如果需要 stat 等函数
@@ -37,7 +39,7 @@
 // WiFi事件组
 static EventGroupHandle_t s_event_group;
 const int WIFI_CONNECTED_BIT = BIT0;
-static const char *TAG = "wifi_station";
+static const char *TAG = "main_task";
 
 // 定义音频数据队列
 #define QUEUE_LENGTH 10
@@ -259,6 +261,9 @@ void wifi_init_sta(void)
     }
 }
 
+// uint8_t pcm_buff[640];
+// uint8_t enc_buff[640];
+
 
 void app_main(void) {
     printf("I2S INMP441 Example\n");
@@ -268,11 +273,11 @@ void app_main(void) {
 
 
     //初始化WiFi
-   wifi_init_sta();
+   //wifi_init_sta();
 
     // 初始化 I2S
     //i2s_init();
-
+    //初始化es8311
     if(bsp_8311_init()==ESP_OK)
     {
         ESP_LOGI("ESP8311","BSP_8311_INIT SUCCESS");
@@ -280,17 +285,19 @@ void app_main(void) {
     else{
         ESP_LOGE("ESP8311","BSP_8311_INIT FAILD");
     }
-
+    //初始化编码器和解码器
+    ESP_ERROR_CHECK(bsp_enc_dec_init());
+    bsp_8311_record_play_opus_test();
+    //bsp_8311_record_play_test();
     //bsp_8311_play_music();
+    //初始化lcd
     // bsp_lcd_init();
     // bsp_lcd_full_color(0X1111);
-    // 创建音频数据队列
-    audio_queue = xQueueCreate(QUEUE_LENGTH, sizeof(int16_t) * QUEUE_ITEM_SIZE);
-    if (audio_queue == NULL) {
-        printf("Failed to create audio queue.\n");
-        return;
-    }
-    bsp_8311_record_play_test();
+
+    //     int cur_heap_size = esp_get_free_heap_size();
+    //     ESP_LOGI(TAG,"heap_size:%d",cur_heap_size);
+
+
     ESP_LOGI(TAG,"AUDIO_QUEUE CREATED");
     // 创建 I2S 读取任务，分配到核心 0
    // xTaskCreatePinnedToCore(i2s_read_task, "i2s_read_task", 4096, NULL, 5, NULL, 0);

@@ -33,12 +33,18 @@ extern "C" {
 //功放音量控制
 #define VOICE_VOLUME 50
 
+//important!
+//实际音频数据是有正负的，原始PCM数据采用二进制补码存储
+//大于32767的为负数，小于等于32767的为正数
+
+
 
 esp_err_t bsp_8311_init(void);
 esp_err_t bsp_8311_play_music(void);
 esp_err_t bsp_8311_read(void *buffer,int len);
 esp_err_t bsp_8311_write(void *buffer,int len);
 esp_err_t bsp_8311_record_play_test(void);
+esp_err_t bsp_8311_record_play_opus_test(void);
 
 #ifdef _cplusplus
 }
