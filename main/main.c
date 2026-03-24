@@ -24,6 +24,9 @@
 #include "bsp_lcd.h"
 #include "bsp_ov3660.h"
 #include "bsp_enc_dec.h"
+#include "bsp_wifi.h"
+
+
 
 #include <dirent.h>
 #include <sys/stat.h>   // 如果需要 stat 等函数
@@ -208,61 +211,79 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 // 初始化WiFi为STA模式
 void wifi_init_sta(void)
 {
-    s_event_group = xEventGroupCreate();  // 创建事件组
+    // s_event_group = xEventGroupCreate();  // 创建事件组
 
-    ESP_ERROR_CHECK(esp_netif_init());    // 初始化网络接口
-    ESP_ERROR_CHECK(esp_event_loop_create_default());  // 创建默认事件循环
-    esp_netif_create_default_wifi_sta();  // 创建默认的WiFi STA
+    // ESP_ERROR_CHECK(esp_netif_init());    // 初始化网络接口
+    // ESP_ERROR_CHECK(esp_event_loop_create_default());  // 创建默认事件循环
+    // esp_netif_create_default_wifi_sta();  // 创建默认的WiFi STA
 
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));  // 初始化WiFi
+    // wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    // ESP_ERROR_CHECK(esp_wifi_init(&cfg));  // 初始化WiFi
 
-    esp_event_handler_instance_t instance_any_id;
-    esp_event_handler_instance_t instance_got_ip;
+    // esp_event_handler_instance_t instance_any_id;
+    // esp_event_handler_instance_t instance_got_ip;
 
-    // 注册WiFi事件处理程序
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                        ESP_EVENT_ANY_ID,
-                                                        &wifi_event_handler,
-                                                        NULL,
-                                                        &instance_any_id));  
-    // 注册IP事件处理程序
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-                                                        IP_EVENT_STA_GOT_IP,
-                                                        &wifi_event_handler,
-                                                        NULL,
-                                                        &instance_got_ip));  
+    // // 注册WiFi事件处理程序
+    // ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+    //                                                     ESP_EVENT_ANY_ID,
+    //                                                     &wifi_event_handler,
+    //                                                     NULL,
+    //                                                     &instance_any_id));  
+    // // 注册IP事件处理程序
+    // ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+    //                                                     IP_EVENT_STA_GOT_IP,
+    //                                                     &wifi_event_handler,
+    //                                                     NULL,
+    //                                                     &instance_got_ip));  
 
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = WIFI_SSID,  // 设置SSID
-            .password = WIFI_PASSWORD,  // 设置密码
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,  // 设置认证模式
-            .pmf_cfg = {    // 设置PMF配置，PMF即Protected Management Frames，用于保护管理帧
-                .capable = true,    // 是否支持PMF
-                .required = false   // 是否要求PMF
-            },
-        },
-    };
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );  // 设置WiFi模式为STA
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );  // 设置WiFi配置
-    ESP_ERROR_CHECK(esp_wifi_start());  // 启动WiFi
+    // wifi_config_t wifi_config = {
+    //     .sta = {
+    //         .ssid = WIFI_SSID,  // 设置SSID
+    //         .password = WIFI_PASSWORD,  // 设置密码
+    //         .threshold.authmode = WIFI_AUTH_WPA2_PSK,  // 设置认证模式
+    //         .pmf_cfg = {    // 设置PMF配置，PMF即Protected Management Frames，用于保护管理帧
+    //             .capable = true,    // 是否支持PMF
+    //             .required = false   // 是否要求PMF
+    //         },
+    //     },
+    // };
+    // ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );  // 设置WiFi模式为STA
+    // ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );  // 设置WiFi配置
+    // ESP_ERROR_CHECK(esp_wifi_start());  // 启动WiFi
 
-    EventBits_t bits = xEventGroupWaitBits(s_event_group,
-            WIFI_CONNECTED_BIT,
-            pdFALSE,
-            pdTRUE,
-            portMAX_DELAY);  // 等待连接事件
+    // EventBits_t bits = xEventGroupWaitBits(s_event_group,
+    //         WIFI_CONNECTED_BIT,
+    //         pdFALSE,
+    //         pdTRUE,
+    //         portMAX_DELAY);  // 等待连接事件
 
-    if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "连接WiFi成功");  // 打印连接成功信息
-    } else {
-        ESP_LOGE(TAG, "连接WiFi失败");  // 打印连接失败信息
-    }
+    // if (bits & WIFI_CONNECTED_BIT) {
+    //     ESP_LOGI(TAG, "连接WiFi成功");  // 打印连接成功信息
+    // } else {
+    //     ESP_LOGE(TAG, "连接WiFi失败");  // 打印连接失败信息
+    // }
 }
 
 // uint8_t pcm_buff[640];
 // uint8_t enc_buff[640];
+void memory_monitor()
+{
+    static char buffer[128];    /* Make sure buffer is enough for `sprintf` */
+    if (1) {
+        sprintf(buffer, "   Biggest /     Free /    Total\n"
+                "\t  SRAM : [%8d / %8d / %8d]\n"
+                "\t PSRAM : [%8d / %8d / %8d]",
+                heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+                heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                heap_caps_get_total_size(MALLOC_CAP_INTERNAL),
+                heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM),
+                heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+                heap_caps_get_total_size(MALLOC_CAP_SPIRAM));
+        ESP_LOGI("MEM", "%s", buffer);
+        vTaskDelay(5000 / portTICK_PERIOD_MS);
+    }
+}
+
 
 
 void app_main(void) {
@@ -271,13 +292,12 @@ void app_main(void) {
     // 初始化NVS
     ESP_ERROR_CHECK(nvs_flash_init());
 
+    //初始化wifi,连接wifi网络
+    ESP_ERROR_CHECK(bsp_wifi_init());
 
-    //初始化WiFi
-   //wifi_init_sta();
 
-    // 初始化 I2S
-    //i2s_init();
-    //初始化es8311
+
+    //初始化es8311麦克风和扬声器
     if(bsp_8311_init()==ESP_OK)
     {
         ESP_LOGI("ESP8311","BSP_8311_INIT SUCCESS");
@@ -287,6 +307,8 @@ void app_main(void) {
     }
     //初始化编码器和解码器
     ESP_ERROR_CHECK(bsp_enc_dec_init());
+        int cur_heap_size = esp_get_free_heap_size();
+        ESP_LOGI(TAG,"heap_size:%d",cur_heap_size);
     bsp_8311_record_play_opus_test();
     //bsp_8311_record_play_test();
     //bsp_8311_play_music();
@@ -294,9 +316,8 @@ void app_main(void) {
     // bsp_lcd_init();
     // bsp_lcd_full_color(0X1111);
 
-    //     int cur_heap_size = esp_get_free_heap_size();
-    //     ESP_LOGI(TAG,"heap_size:%d",cur_heap_size);
 
+    
 
     ESP_LOGI(TAG,"AUDIO_QUEUE CREATED");
     // 创建 I2S 读取任务，分配到核心 0

@@ -150,39 +150,51 @@ esp_err_t bsp_8311_record_play_test(void)
 //录音播放加解压缩测试
 esp_err_t bsp_8311_record_play_opus_test(void)
 {
-    int16_t *i2s_read_buffer = heap_caps_malloc(640*4, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    int16_t *opus_buffer=heap_caps_malloc(640*4, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    int16_t *dec_buffer=heap_caps_malloc(640*4, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    int16_t *i2s_read_buffer = heap_caps_malloc(640, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    int16_t *opus_buffer=heap_caps_malloc(640, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    int16_t *dec_buffer=heap_caps_malloc(640, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     uint32_t opus_len=0;
     uint32_t pcm_len=0;
+    int cur_heap_size=0;
     while(1)
     {
-         esp_err_t ret = bsp_8311_read(i2s_read_buffer, 640*4);
+        esp_err_t ret = bsp_8311_read(i2s_read_buffer, 640);
         if(ret!=ESP_OK)
          {
             ESP_LOGE(TAG,"read fail");
+            break;
          }
          else{
-            bsp_enc_dec_encode(i2s_read_buffer,640*4,opus_buffer,640*4,&opus_len);
-            for(uint8_t i=0;i<4;i++)
+            if(bsp_enc_dec_encode(i2s_read_buffer,640,opus_buffer,640,&opus_len)!=ESP_OK)
             {
-                bsp_enc_dec_decode(opus_buffer+i*64,128,dec_buffer+i*320,640,&pcm_len); //这里的64本质是128/2，因为指针用的16位
+                ESP_LOGE(TAG,"encode fail");
+                break;
+            }
+            if(bsp_enc_dec_decode(opus_buffer,128,dec_buffer,640,&pcm_len)!=ESP_OK)//这里的64本质是128/2，因为指针用的16位
+            {
+                ESP_LOGE(TAG,"decode fail");
+                break;
+            } 
+            for(uint8_t i=0;i<2;i++)
+            {
+
             }
             //bsp_enc_dec_decode(opus_buffer,128,dec_buffer,640*4,&pcm_len);
             ESP_LOGI(TAG,"pcm_len:%d,opus:%d",pcm_len,opus_len);
-            for(int i=0;i<pcm_len*4;i++)
-            {
-                int32_t amplified = dec_buffer[i]*4;
-        
-                // 限幅处理，防止削波
-                if (amplified > 32767) amplified = 32767;
-                if (amplified < -32768) amplified = -32768;
+            // int32_t amplified = 0;
+            // for(int i=0;i<pcm_len;i++)
+            // {
                 
-                dec_buffer[i] = (int16_t)amplified;
-            }
-             bsp_8311_write(dec_buffer,pcm_len*4);
+            //     amplified = dec_buffer[i]*4;
+            //     // 限幅处理，防止削波
+            //     if (amplified > 32767) amplified = 32767;
+            //     if (amplified < -32768) amplified = -32768;
+                
+            //     dec_buffer[i] = (int16_t)amplified;
+            // }
+            ESP_ERROR_CHECK(bsp_8311_write(dec_buffer,640));
          }
-
+         vTaskDelay(pdMS_TO_TICKS(10));
     }
     free(i2s_read_buffer);
     free(opus_buffer);

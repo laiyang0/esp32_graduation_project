@@ -120,24 +120,29 @@ esp_err_t bsp_enc_dec_decode(void *enc_buf, uint32_t enc_len_in,void *pcm_buf, u
         .len=pcm_len,
     };
     esp_audio_err_t ret=ESP_AUDIO_ERR_OK;
-    while (in_raw.len) {
-        // ESP_LOGI(TAG,"NUMBER");
-        ret = esp_audio_dec_process(bsp_dec_handle, &in_raw, &out_frame);
-        ESP_LOGI(TAG,"consumed:%d",in_raw.consumed);
-        if (ret != ESP_AUDIO_ERR_OK && ret != ESP_AUDIO_ERR_BUFF_NOT_ENOUGH) {
-            ESP_LOGI(TAG,"DECODE_ERROR");
-            break;
-        }
-        in_raw.buffer += in_raw.consumed;
-        in_raw.len -= in_raw.consumed;
-        if(out_frame.needed_size!=0)    //如果解码后放置的PCM数据长度不足，这里报错
-        {
-            ESP_LOGE(TAG,"AUDIO_DEC_OUT_BUFFER_SIZE");
-            return ESP_FAIL;
-        }
-        *pcm_len_out+=out_frame.decoded_size;
+    // while (in_raw.len) {
+    //     // ESP_LOGI(TAG,"NUMBER");
+    //     ret = esp_audio_dec_process(bsp_dec_handle, &in_raw, &out_frame);
+    //     ESP_LOGI(TAG,"consumed:%d",in_raw.consumed);
+    //     if (ret != ESP_AUDIO_ERR_OK && ret != ESP_AUDIO_ERR_BUFF_NOT_ENOUGH) {
+    //         ESP_LOGI(TAG,"DECODE_ERROR");
+    //         break;
+    //     }
+    //     in_raw.buffer += in_raw.consumed;
+    //     in_raw.len -= in_raw.consumed;
+    //     if(out_frame.needed_size!=0)    //如果解码后放置的PCM数据长度不足，这里报错
+    //     {
+    //         ESP_LOGE(TAG,"AUDIO_DEC_OUT_BUFFER_SIZE");
+    //         return ESP_FAIL;
+    //     }
+    //     *pcm_len_out+=out_frame.decoded_size;
+    // }
+    ret = esp_audio_dec_process(bsp_dec_handle, &in_raw, &out_frame);
+    if (ret != ESP_AUDIO_ERR_OK && ret != ESP_AUDIO_ERR_BUFF_NOT_ENOUGH) 
+    {
+            ESP_LOGE(TAG,"DECODE_ERROR");
     }
-
+    *pcm_len_out+=out_frame.decoded_size;
     return ESP_OK;
 }
     

@@ -103,6 +103,17 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.4.0
+  espressif/esp_websocket_client:
+    component_hash: 
+      c5a067a9fddea370c478017e66fac302f4b79c3d4027e9bdd42a019786cceb92
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.6.1
   idf:
     source:
       type: idf
@@ -112,7 +123,8 @@ direct_dependencies:
 - espressif/esp32-camera
 - espressif/esp_audio_codec
 - espressif/esp_mmap_assets
+- espressif/esp_websocket_client
 - idf
-manifest_hash: 9b5bd340ad398834d08b40833b52bb318ad79678f031e1bb7d6cb144eb7e8697
+manifest_hash: 0b1e30e6bdd3ed9bf98bc13545509e18ed10b61dcd5502d1d2d63686b7b664ce
 target: esp32s3
 version: 2.0.0
