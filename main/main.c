@@ -25,6 +25,7 @@
 #include "bsp_ov3660.h"
 #include "bsp_enc_dec.h"
 #include "bsp_wifi.h"
+#include "bsp_websocket.h"
 
 
 
@@ -264,8 +265,6 @@ void wifi_init_sta(void)
     // }
 }
 
-// uint8_t pcm_buff[640];
-// uint8_t enc_buff[640];
 void memory_monitor()
 {
     static char buffer[128];    /* Make sure buffer is enough for `sprintf` */
@@ -284,18 +283,77 @@ void memory_monitor()
     }
 }
 
+typedef enum
+{
+    STATE_WAITING_WAKEUP = 0,   // 休眠状态：等待用户说"你好小智"
+    STATE_RECORDING = 1,        // 录音状态：正在录制用户说话
+    STATE_WAITING_RESPONSE = 2, // 等待状态：等待服务器返回AI响应
+} system_state_t;
+static system_state_t current_state = STATE_WAITING_WAKEUP; //当前系统状态
 
+int16_t *play_buffer=NULL;
+// 定义信号量句柄
+SemaphoreHandle_t play_semaphore;
+
+//websocket接收回调函数声明
+void bsp_user_event_callback(const struct EventData* event);
+//websocket用户数据接收回调函数
+void bsp_user_event_callback(const struct EventData* event)
+{
+    ESP_LOGI(TAG, "收到WebSocket事件: %d", event->type);
+    switch(event->type)
+    {
+        case CONNECTED:
+            break;
+        case DISCONNECTED:
+            break;
+        case DATA_TEXT:
+            char* data = (char*)event->data;
+            break;
+        case DATA_BINARY:
+            ESP_LOGI(TAG, "data_len:%d", event->data_len);
+            if(event->data==NULL)
+            {
+                ESP_LOGE(TAG, "event_data_error");
+            }
+            if(play_buffer==NULL)
+            {
+                ESP_LOGE(TAG, "play_buffer_error");
+            }
+            memcpy(play_buffer,event->data,event->data_len);
+            xSemaphoreGive(play_semaphore);
+            break;
+        default:
+            break;
+    }
+}
+//简短的播放任务，用于测试
+void play_task(void *arg) {
+    ESP_LOGI(TAG, "play_task start");
+    while(1)
+    {
+        if (xSemaphoreTake(play_semaphore, portMAX_DELAY) == pdTRUE) 
+        {
+            // ESP_LOGE(TAG, "play_task get semaphore");
+            // 被唤醒，从缓冲区取出音频数据并播放
+            bsp_8311_write(play_buffer,640*2);
+            
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
 
 void app_main(void) {
-    printf("I2S INMP441 Example\n");
-
     // 初始化NVS
     ESP_ERROR_CHECK(nvs_flash_init());
 
     //初始化wifi,连接wifi网络
     ESP_ERROR_CHECK(bsp_wifi_init());
-
-
+    play_buffer = heap_caps_malloc(640*2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    //初始化websocket协议
+    ESP_ERROR_CHECK(bsp_websocket_init());
+    //注册websocket接收回调函数
+    event_callback_=bsp_user_event_callback;
 
     //初始化es8311麦克风和扬声器
     if(bsp_8311_init()==ESP_OK)
@@ -307,14 +365,34 @@ void app_main(void) {
     }
     //初始化编码器和解码器
     ESP_ERROR_CHECK(bsp_enc_dec_init());
-        int cur_heap_size = esp_get_free_heap_size();
-        ESP_LOGI(TAG,"heap_size:%d",cur_heap_size);
-    bsp_8311_record_play_opus_test();
+
+    //bsp_8311_record_play_opus_test();
     //bsp_8311_record_play_test();
     //bsp_8311_play_music();
     //初始化lcd
     // bsp_lcd_init();
     // bsp_lcd_full_color(0X1111);
+    // 创建二值信号量
+    play_semaphore = xSemaphoreCreateBinary();//同步播放任务
+    xTaskCreatePinnedToCore(play_task, "socket_send_task", 4096, NULL, 5, NULL, 1);
+    int16_t *read_buffer = heap_caps_malloc(640*2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    
+
+    while(1)
+    {
+        // const char* start_msg = "{\"event\":\"recording_started\"}";
+        // bsp_websocket_send_text(start_msg,strlen(start_msg),100);
+        // vTaskDelay(pdMS_TO_TICKS(100));
+        if(bsp_8311_read(read_buffer,640*2)!=ESP_OK)
+        {
+            ESP_LOGE(TAG,"BSP_8311_READ_ERROR");
+        }
+        else{
+            bsp_websocket_send_bin((char *)read_buffer,640*2,100);
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 
 
     
@@ -324,7 +402,7 @@ void app_main(void) {
    // xTaskCreatePinnedToCore(i2s_read_task, "i2s_read_task", 4096, NULL, 5, NULL, 0);
     ESP_LOGI(TAG,"I2S READ_TASK CREATED");
     // 创建发送任务，分配到核心 1
-    //xTaskCreatePinnedToCore(socket_send_task, "socket_send_task", 4096, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(play_task, "socket_send_task", 4096, NULL, 5, NULL, 0);
     ESP_LOGI(TAG,"SOCKET_SEND_TASK CREATED");
     // bsp_ov3660_init();
     // while(1)

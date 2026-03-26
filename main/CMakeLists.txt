@@ -6,6 +6,8 @@ idf_component_register(
         "./bsp/bsp_ov3660.c"
         "./bsp/bsp_enc_dec.c"
         "./bsp/bsp_wifi.c"
+        "./bsp/bsp_websocket.c"
+        "task.c"
     INCLUDE_DIRS "."
         "./bsp"
     REQUIRES esp_driver_i2s
