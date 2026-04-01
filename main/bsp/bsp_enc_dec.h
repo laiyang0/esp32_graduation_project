@@ -18,7 +18,8 @@ esp_err_t bsp_enc_dec_deinit(void);
 esp_err_t bsp_enc_dec_encode(void *pcm_buf, uint32_t pcm_len, void *enc_buf, uint32_t enc_len_in,uint32_t *enc_len_out);
 esp_err_t bsp_enc_dec_decode(void *enc_buf, uint32_t enc_len_in,void *pcm_buf, uint32_t pcm_len,uint32_t *pcm_len_out);
 
-
+esp_err_t bsp_enc_dec_encode_base64(const uint8_t *input,size_t input_len,char *output,size_t output_buffer_size,size_t *output_len);
+esp_err_t bsp_enc_dec_decode_base64(const char *input, size_t input_buffer_size,uint8_t *output, size_t output_buffer_size,size_t *output_len);
 
 #ifdef _cpluscplus
 }

@@ -12,6 +12,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
+
+#include "mbedtls/base64.h"
 static const char *TAG = "BSP_ENC_DEC";
 
 
@@ -143,6 +145,53 @@ esp_err_t bsp_enc_dec_decode(void *enc_buf, uint32_t enc_len_in,void *pcm_buf, u
             ESP_LOGE(TAG,"DECODE_ERROR");
     }
     *pcm_len_out+=out_frame.decoded_size;
+    return ESP_OK;
+}
+//base64编码方式
+esp_err_t bsp_enc_dec_encode_base64(const uint8_t *input,size_t input_len,char *output,size_t output_buffer_size,size_t *output_len)
+{
+    *output_len = 0;
+    
+    // 计算所需缓冲区大小
+    size_t needed_size = ((input_len + 2) / 3) * 4 + 1;  // +1 for null terminator
+    
+    if (output_buffer_size < needed_size) {
+        ESP_LOGE(TAG, "输出缓冲区太小: 需要%zu字节, 只有%zu字节", 
+                needed_size, output_buffer_size);
+        return ESP_FAIL;
+    }
+        // 执行编码
+    int ret = mbedtls_base64_encode((unsigned char *)output, output_buffer_size, output_len, input, input_len);
+    
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Base64编码失败: %d", ret);
+        return ESP_FAIL;
+    }
+    // 确保字符串以null结尾
+    output[*output_len] = '\0';
+    return ESP_OK;
+}
+//base解码格式
+esp_err_t bsp_enc_dec_decode_base64(const char *input, size_t input_buffer_size,uint8_t *output, size_t output_buffer_size,size_t *output_len)
+{
+    *output_len = 0;
+        // 计算最大输出大小
+    size_t max_output_len = (input_buffer_size * 3) / 4;
+    
+    if (output_buffer_size < max_output_len) {
+        ESP_LOGE(TAG, "输出缓冲区太小: 需要至少%zu字节", max_output_len);
+        return ESP_FAIL;
+    }
+    
+    // 执行解码
+    int ret = mbedtls_base64_decode(output, output_buffer_size, output_len, 
+                                   (const unsigned char *)input, 
+                                   strlen(input));
+    
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Base64解码失败: %d", ret);
+        return ESP_FAIL;
+    }
     return ESP_OK;
 }
     

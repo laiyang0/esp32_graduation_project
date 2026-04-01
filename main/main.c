@@ -27,6 +27,9 @@
 #include "bsp_wifi.h"
 #include "bsp_websocket.h"
 
+#include "cJSON.h"
+#include "qwen.h"
+
 
 
 #include <dirent.h>
@@ -36,9 +39,10 @@
 #define WIFI_PASSWORD  "250250250"    // WiFi 密码
 
 
-// 服务器配置
-#define SERVER_IP   "192.168.106.250"   // 服务器 IP
-#define SERVER_PORT 12345           // 服务器端口
+
+// // 服务器配置
+// #define SERVER_IP   "192.168.106.250"   // 服务器 IP
+// #define SERVER_PORT 12345           // 服务器端口
 
 // WiFi事件组
 static EventGroupHandle_t s_event_group;
@@ -50,6 +54,8 @@ static const char *TAG = "main_task";
 #define I2S_BUF_SIZE 1024
 #define QUEUE_ITEM_SIZE I2S_BUF_SIZE
 static QueueHandle_t audio_queue;
+static QueueHandle_t websocket_queue;
+
 
 // 定义全局缓冲区
 static int16_t i2s_read_buffer_global[I2S_BUF_SIZE];
@@ -95,175 +101,11 @@ void i2s_read_task(void *param) {
     }
 }
 
-// 简单校验和计算（按字节）
-uint32_t calculate_checksum(int16_t *data, size_t length) {
-    uint32_t checksum = 0;
-    uint8_t *byte_data = (uint8_t*)data;
-    for (size_t i = 0; i < length * 2; i++) {  // 每个int16_t包含2个字节
-        checksum += byte_data[i];
-    }
-    return checksum;
-}
 
-// 发送所有数据，确保全部发送
-int send_all(int sock, uint8_t *buffer, size_t length) {
-    size_t total_sent = 0;
-    while (total_sent < length) {
-        int sent = send(sock, buffer + total_sent, length - total_sent, 0);
-        if (sent < 0) {
-            return -1;  // 发送错误
-        }
-        total_sent += sent;
-    }
-    return total_sent;
-}
 
-// 发送任务
-void socket_send_task(void *param) {
-    struct sockaddr_in dest_addr;
-    dest_addr.sin_addr.s_addr = inet_addr(SERVER_IP);
-    dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = htons(SERVER_PORT);
 
-    int sock = -1;
 
-    while (1) {
-        // 如果套接字未创建或已关闭，创建新的套接字
-        if (sock < 0) {
-            sock = socket(AF_INET, SOCK_STREAM, 0);
-            if (sock < 0) {
-                printf("Socket creation error, retry...\n");
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                continue;
-            }
-            if (connect(sock, (struct sockaddr *)&dest_addr, sizeof(dest_addr)) != 0) {
-                printf("Socket connect failed, retry...\n");
-                close(sock);
-                sock = -1;
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                continue;
-            }
-            printf("TCP connected to server.\n");
-        }
 
-        // 从队列中接收数据
-        int16_t buffer[QUEUE_ITEM_SIZE];
-        if (xQueueReceive(audio_queue, buffer, portMAX_DELAY) == pdPASS) {
-            bsp_8311_write( buffer,QUEUE_ITEM_SIZE*2);
-            // 计算校验和（按字节）
-            uint32_t checksum = calculate_checksum(buffer, QUEUE_ITEM_SIZE);
-
-            // 创建发送缓冲区：长度（4字节） + 数据 + 校验和（4字节）
-            uint32_t length = QUEUE_ITEM_SIZE * sizeof(int16_t);
-            size_t packet_size = sizeof(length) + length + sizeof(checksum);
-            uint8_t *packet = malloc(packet_size);
-            if (packet == NULL) {
-                printf("Memory allocation failed.\n");
-                continue;
-            }
-
-            // 填充长度（网络字节序）
-            uint32_t net_length = htonl(length);
-            memcpy(packet, &net_length, sizeof(net_length));
-
-            // 填充数据
-            memcpy(packet + sizeof(net_length), buffer, length);
-
-            // 填充校验和（网络字节序）
-            uint32_t net_checksum = htonl(checksum);
-            memcpy(packet + sizeof(net_length) + length, &net_checksum, sizeof(net_checksum));
-
-            // 发送数据包，确保全部发送
-            int sent = send_all(sock, packet, packet_size);
-            if (sent != packet_size) {
-                printf("Send error, reconnect...\n");
-                close(sock);
-                sock = -1;
-            }
-
-            free(packet);
-        }
-    }
-}
-
-// 初始化SNTP
-void initialise_sntp(void){
-    ESP_LOGI(TAG, "Initializing SNTP");
-    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);  // 使用新的函数
-    esp_sntp_setservername(0, "pool.ntp.org");     // 使用新的函数
-    esp_sntp_init();                               // 使用新的函数
-}
-
-// 事件处理程序
-static void wifi_event_handler(void* arg, esp_event_base_t event_base,
-                          int32_t event_id, void* event_data)
-{
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();  // 尝试连接WiFi
-    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        esp_wifi_connect();  // 重新连接WiFi
-        xEventGroupClearBits(s_event_group, WIFI_CONNECTED_BIT);  // 清除连接位
-    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-        xEventGroupSetBits(s_event_group, WIFI_CONNECTED_BIT);  // 设置连接位
-        initialise_sntp();  // 在连接后初始化SNTP
-    }
-}
-
-// 初始化WiFi为STA模式
-void wifi_init_sta(void)
-{
-    // s_event_group = xEventGroupCreate();  // 创建事件组
-
-    // ESP_ERROR_CHECK(esp_netif_init());    // 初始化网络接口
-    // ESP_ERROR_CHECK(esp_event_loop_create_default());  // 创建默认事件循环
-    // esp_netif_create_default_wifi_sta();  // 创建默认的WiFi STA
-
-    // wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    // ESP_ERROR_CHECK(esp_wifi_init(&cfg));  // 初始化WiFi
-
-    // esp_event_handler_instance_t instance_any_id;
-    // esp_event_handler_instance_t instance_got_ip;
-
-    // // 注册WiFi事件处理程序
-    // ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-    //                                                     ESP_EVENT_ANY_ID,
-    //                                                     &wifi_event_handler,
-    //                                                     NULL,
-    //                                                     &instance_any_id));  
-    // // 注册IP事件处理程序
-    // ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-    //                                                     IP_EVENT_STA_GOT_IP,
-    //                                                     &wifi_event_handler,
-    //                                                     NULL,
-    //                                                     &instance_got_ip));  
-
-    // wifi_config_t wifi_config = {
-    //     .sta = {
-    //         .ssid = WIFI_SSID,  // 设置SSID
-    //         .password = WIFI_PASSWORD,  // 设置密码
-    //         .threshold.authmode = WIFI_AUTH_WPA2_PSK,  // 设置认证模式
-    //         .pmf_cfg = {    // 设置PMF配置，PMF即Protected Management Frames，用于保护管理帧
-    //             .capable = true,    // 是否支持PMF
-    //             .required = false   // 是否要求PMF
-    //         },
-    //     },
-    // };
-    // ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );  // 设置WiFi模式为STA
-    // ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );  // 设置WiFi配置
-    // ESP_ERROR_CHECK(esp_wifi_start());  // 启动WiFi
-
-    // EventBits_t bits = xEventGroupWaitBits(s_event_group,
-    //         WIFI_CONNECTED_BIT,
-    //         pdFALSE,
-    //         pdTRUE,
-    //         portMAX_DELAY);  // 等待连接事件
-
-    // if (bits & WIFI_CONNECTED_BIT) {
-    //     ESP_LOGI(TAG, "连接WiFi成功");  // 打印连接成功信息
-    // } else {
-    //     ESP_LOGE(TAG, "连接WiFi失败");  // 打印连接失败信息
-    // }
-}
 
 void memory_monitor()
 {
@@ -291,7 +133,8 @@ typedef enum
 } system_state_t;
 static system_state_t current_state = STATE_WAITING_WAKEUP; //当前系统状态
 
-int16_t *play_buffer=NULL;
+uint8_t *play_buffer=NULL;
+uint8_t *play_buffer_dec=NULL;
 // 定义信号量句柄
 SemaphoreHandle_t play_semaphore;
 
@@ -308,10 +151,7 @@ void bsp_user_event_callback(const struct EventData* event)
         case DISCONNECTED:
             break;
         case DATA_TEXT:
-            char* data = (char*)event->data;
-            break;
-        case DATA_BINARY:
-            ESP_LOGI(TAG, "data_len:%d", event->data_len);
+        // ESP_LOGI(TAG, "text_data_len:%d", event->data_len);
             if(event->data==NULL)
             {
                 ESP_LOGE(TAG, "event_data_error");
@@ -320,41 +160,269 @@ void bsp_user_event_callback(const struct EventData* event)
             {
                 ESP_LOGE(TAG, "play_buffer_error");
             }
-            memcpy(play_buffer,event->data,event->data_len);
-            xSemaphoreGive(play_semaphore);
+            struct EventData queue_event;
+            queue_event.type=event->type;
+            queue_event.data_len=event->data_len;
+            queue_event.op_code=event->op_code;
+            queue_event.payload_len=event->payload_len;
+            queue_event.payload_offset=event->payload_offset;
+
+            //这里不直接将该内存分配给队列的data指针，因为队列的data指针指向const uint8_t *,分配之后不能够再memcpy进行修改（后续修改为了uint8_t*）
+            queue_event.data=heap_caps_malloc(queue_event.data_len, MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT); //这里重新分配内存进行拷贝，防止解析过程中原指针被释放掉
+            if(queue_event.data==NULL)
+            {
+                ESP_LOGE(TAG, "malloc error");
+            }
+            memcpy(queue_event.data,event->data,event->data_len);
+            if(xQueueSend(websocket_queue, &queue_event, 0)!= pdPASS)
+            {
+                ESP_LOGE(TAG, "websocket_queue_send_error");
+                free(queue_event.data);
+            }
+            // websocket_queue
+            // memset(play_buffer,0,640*2);
+            // if(play_semaphore==NULL)
+            // {
+            //     ESP_LOGE(TAG, "play_semaphore_handle_error");
+            // }
+            // else{
+            //     xSemaphoreGive(play_semaphore);
+            // }
+            break;
+        case DATA_BINARY:
+            ESP_LOGI(TAG, "bin_data_len:%d", event->data_len);
+            // if(event->data==NULL)
+            // {
+            //     ESP_LOGE(TAG, "event_data_error");
+            // }
+            // if(play_buffer==NULL)
+            // {
+            //     ESP_LOGE(TAG, "play_buffer_error");
+            // }
+            // memcpy(play_buffer,event->data,event->data_len);
+            // xSemaphoreGive(play_semaphore);
+            break;
+        case CLOSE:
+            // memset(play_buffer,0,640*2);
+            // memcpy(play_buffer,event->data,event->data_len);
+            // if(play_semaphore==NULL)
+            // {
+            //     ESP_LOGE(TAG, "play_semaphore_handle_error");
+            // }
+            // else{
+            //     xSemaphoreGive(play_semaphore);
+            // }
             break;
         default:
             break;
     }
 }
 //简短的播放任务，用于测试
-void play_task(void *arg) {
-    ESP_LOGI(TAG, "play_task start");
+void qwen_message_handle_task(void *arg) {
+    ESP_LOGI(TAG, "qwen_message_handle_task start");
+    qwen_server_event_t event_type=-1;
+    struct EventData queue_data;
     while(1)
     {
-        if (xSemaphoreTake(play_semaphore, portMAX_DELAY) == pdTRUE) 
+        if (xQueueReceive(websocket_queue,&queue_data, portMAX_DELAY) == pdPASS) //接收到服务器的json数据
         {
-            // ESP_LOGE(TAG, "play_task get semaphore");
-            // 被唤醒，从缓冲区取出音频数据并播放
-            bsp_8311_write(play_buffer,640*2);
+            ESP_LOGE(TAG,"qwen_message_handle_task:data_len:%d,pay_len:%d,pay_offset:%d",queue_data.data_len,queue_data.payload_len,queue_data.payload_offset);
+            // ESP_LOGI(TAG,"receive:%s",queue_data.data);
+            if(queue_data.data_len==queue_data.payload_len) //这里说明数据没有进行分片，即为完整数据
+            {
+                ESP_LOGI(TAG,"receive:%s",queue_data.data);
+                event_type=-1;  //根据这个值判断不同的事件，-1表示错误
+                cJSON *root=cJSON_Parse((const char*)queue_data.data);
+                if(root==NULL)
+                {
+                    ESP_LOGE(TAG, "queue_data:JSON 解析失败");
+                    free(queue_data.data);  //释放队列中data指针指向的内存
+                    cJSON_Delete(root);     //删除cjson对象,释放内存
+                    continue;
+                }
+                cJSON *type = cJSON_GetObjectItem(root, "type");    //这里进行不同类型的type的数据处理
+                if (cJSON_IsString(type)) 
+                {
+                    for(int i=0;i<22;i++)
+                    {
+                        if(strcmp(qwen_server_event_str[i],type->valuestring)==0)
+                        {
+                            event_type=i;
+                            ESP_LOGE(TAG, "event_type:%d:%s",event_type,qwen_server_event_str[event_type]);
+                        }
+                    }
+                    switch (event_type) {
+                        case error:
+                            ESP_LOGE(TAG, "Received error event");
+                            break;
+                        case session_created:
+                            ESP_LOGI(TAG, "Session created");
+                            break;
+                        case session_updated:
+                            ESP_LOGI(TAG, "Session updated");
+                            break;
+                        case input_audio_buffer_speech_started:
+                            ESP_LOGI(TAG, "Speech started (VAD detected)");
+                            break;
+                        case input_audio_buffer_speech_stopped:
+                            ESP_LOGI(TAG, "Speech stopped");
+                            break;
+                        case input_audio_buffer_committed:
+                            ESP_LOGI(TAG, "Audio buffer committed");
+                            break;
+                        case input_audio_buffer_cleared:
+                            ESP_LOGI(TAG, "Audio buffer cleared");
+                            break;
+                        case conversation_item_created:
+                            ESP_LOGI(TAG, "Conversation item created");
+                            break;
+                        case conversation_item_input_completed:
+                            ESP_LOGI(TAG, "Input transcription completed");
+                            break;
+                        case conversation_item_input_failed:
+                            ESP_LOGI(TAG, "Input transcription failed");
+                            break;
+                        case response_created:
+                            ESP_LOGI(TAG, "Response created");
+                            break;
+                        case response_done:
+                            ESP_LOGI(TAG, "Response done");
+                            break;
+                        case response_text_delta:
+                            ESP_LOGI(TAG, "Text delta received");
+                            // 可在此解析文本增量
+                            break;
+                        case response_text_done:
+                            ESP_LOGI(TAG, "Text generation done");
+                            break;
+                        case response_audio_delta:
+                            ESP_LOGI(TAG, "Audio delta received");
+                            // 在此处理 Base64 音频块
+                            break;
+                        case response_audio_done:
+                            ESP_LOGI(TAG, "Audio generation done");
+                            break;
+                        case response_audio_transcript_delta:
+                            ESP_LOGI(TAG, "Audio transcript delta");
+                            break;
+                        case response_audio_transcript_done:
+                            ESP_LOGI(TAG, "Audio transcript done");
+                            break;
+                        case response_output_item_added:
+                            ESP_LOGI(TAG, "Output item added");
+                            break;
+                        case response_output_item_done:
+                            ESP_LOGI(TAG, "Output item done");
+                            break;
+                        case response_content_part_added:
+                            ESP_LOGI(TAG, "Content part added");
+                            break;
+                        case response_content_part_done:
+                            ESP_LOGI(TAG, "Content part done");
+                            break;
+                        default:
+                            ESP_LOGW(TAG, "Unknown server event: %d", event_type);
+                            break;
+                    } 
+                }
+                free(queue_data.data);  //释放队列中data指针指向的内存
+                cJSON_Delete(root);     //删除cjson对象,释放内存
+            }
+            else    //数据进行了分片，需要拼接之后才能组成完整数据，进行json解析，往往为音频原始数据
+            {
+                memcpy(play_buffer+queue_data.payload_offset,queue_data.data,queue_data.data_len);
+                free(queue_data.data);  //释放队列中data指针指向的内存
+                if(queue_data.payload_offset+queue_data.data_len==queue_data.payload_len)   //这里代表一个完整的帧合并完成
+                {
+                    event_type=-1;  //根据这个值判断不同的事件，-1表示错误
+                    cJSON *root=cJSON_Parse((const char*)play_buffer);
+
+                    if(root==NULL)
+                    {
+                        ESP_LOGE(TAG, "play_buffer:JSON 解析失败");
+                        cJSON_Delete(root);     //删除cjson对象,释放内存
+                        continue;
+                    }
+                    cJSON *type = cJSON_GetObjectItem(root, "type");    //这里进行不同类型的type的数据处理
+                    if (cJSON_IsString(type)) 
+                    {
+                        if(strcmp(qwen_server_event_str[14],type->valuestring)==0)  //判断是否为音频数据分片帧
+                        {
+                            ESP_LOGE(TAG, "receive audio_frame");
+                            cJSON *audio_delta = cJSON_GetObjectItem(root, "delta");    
+                            if(cJSON_IsString(audio_delta))
+                            {
+                               // ESP_LOGE(TAG,"audio:%s",audio_delta->valuestring);//非必要情况不打印该数据，该数据为音频数据
+                            //    ESP_LOGE(TAG,"audio_len:%d",strlen(audio_delta->valuestring));   //20480字节的音频base64编码数据
+                               size_t decode_len=0;
+
+                               bsp_enc_dec_decode_base64(audio_delta->valuestring,strlen(audio_delta->valuestring),play_buffer_dec,20680,&decode_len);
+                               ESP_LOGE(TAG,"audio_len:%d",decode_len);   //解码后的数据长度
+                               bsp_8311_write(play_buffer_dec,decode_len);
+                            }
+                        }
+                    }
+
+
+                }
+            }
             
+               
+
         }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
-
+void play_task(void *arg)
+{
+    ESP_LOGI(TAG, "play_task start");
+    while(1)
+    {
+        ESP_LOGE(TAG,"play_task");
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
 void app_main(void) {
     // 初始化NVS
     ESP_ERROR_CHECK(nvs_flash_init());
 
+    ESP_LOGI("APP", "API Key: %s", DASHSCOPE_API_KEY);
+    ESP_LOGI("APP", "Model: %s", DASHSCOPE_MODEL);
     //初始化wifi,连接wifi网络
     ESP_ERROR_CHECK(bsp_wifi_init());
-    play_buffer = heap_caps_malloc(640*2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        // 创建二值信号量
+    play_semaphore = xSemaphoreCreateBinary();//同步播放任务
+    play_buffer = heap_caps_malloc(20680, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    play_buffer_dec=heap_caps_malloc(20680, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if(play_buffer==NULL)
+    {
+        ESP_LOGE(TAG,"buffer_malloc_failed");
+    }
+    //创建websocket消息处理队列，用于提取音频等数据
+    websocket_queue=xQueueCreate(6,sizeof(struct EventData));
+    if(websocket_queue==NULL)
+    {
+        ESP_LOGE(TAG,"websocket queue create failed");
+    }
     //初始化websocket协议
-    ESP_ERROR_CHECK(bsp_websocket_init());
+    ESP_ERROR_CHECK(bsp_websocket_init(websocket_url,api_key));
     //注册websocket接收回调函数
     event_callback_=bsp_user_event_callback;
-
+    //等待websocket连接成功
+    while(1)
+    {
+        if(bsp_websocket_is_connected()==true)
+        {
+            ESP_LOGI(TAG,"websocket connected success");
+            break;
+        }
+        else{
+            ESP_LOGE(TAG,"Waiting websocket connected...");
+        }
+         vTaskDelay(pdMS_TO_TICKS(500));
+    }
+    //初始化websocket以及千问模型访问接口
+    qwen_init();
     //初始化es8311麦克风和扬声器
     if(bsp_8311_init()==ESP_OK)
     {
@@ -363,8 +431,8 @@ void app_main(void) {
     else{
         ESP_LOGE("ESP8311","BSP_8311_INIT FAILD");
     }
-    //初始化编码器和解码器
-    ESP_ERROR_CHECK(bsp_enc_dec_init());
+    //初始化OPUS编码器和解码器,采用base64编码时不需要调用该初始化API
+    //ESP_ERROR_CHECK(bsp_enc_dec_init());
 
     //bsp_8311_record_play_opus_test();
     //bsp_8311_record_play_test();
@@ -372,42 +440,33 @@ void app_main(void) {
     //初始化lcd
     // bsp_lcd_init();
     // bsp_lcd_full_color(0X1111);
-    // 创建二值信号量
-    play_semaphore = xSemaphoreCreateBinary();//同步播放任务
-    xTaskCreatePinnedToCore(play_task, "socket_send_task", 4096, NULL, 5, NULL, 1);
-    int16_t *read_buffer = heap_caps_malloc(640*2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    
 
+
+
+    xTaskCreatePinnedToCore(qwen_message_handle_task, "qwen_message_handle_task", 4096, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(play_task, "play_task", 8192, NULL, 6, NULL, 1);
+    char *read_buffer = heap_caps_malloc(640, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);      //读出的原始音频数据
+    char *read_buffer_encode=heap_caps_malloc(857,MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);//base64编码后的字符数据
+
+    size_t encode_len=0;
     while(1)
     {
-        // const char* start_msg = "{\"event\":\"recording_started\"}";
-        // bsp_websocket_send_text(start_msg,strlen(start_msg),100);
-        // vTaskDelay(pdMS_TO_TICKS(100));
-        if(bsp_8311_read(read_buffer,640*2)!=ESP_OK)
-        {
-            ESP_LOGE(TAG,"BSP_8311_READ_ERROR");
-        }
-        else{
-            bsp_websocket_send_bin((char *)read_buffer,640*2,100);
-        }
-        
+        // if(bsp_8311_read(read_buffer,640*2)!=ESP_OK)
+        // {
+        //     ESP_LOGE(TAG,"BSP_8311_READ_ERROR");
+        // }
+        // else{
+        //     bsp_websocket_send_bin((char *)read_buffer,640*2,100);
+        // }
+
+        bsp_8311_read(read_buffer,640);
+        bsp_enc_dec_encode_base64((uint8_t *)read_buffer,640,read_buffer_encode,857,&encode_len);  //原始PCM数据编码成base64
+        ESP_LOGE(TAG,"encode_len:%d",encode_len);
+        qwen_send_audio(read_buffer_encode,encode_len);
+
+        // bsp_enc_dec_decode_base64(read_buffer_encode,(uint8_t *)read_buffer_decode,1000,&encode_len);
+        // ESP_LOGE(TAG,"decode_len:%d,decode_data:%s",encode_len,read_buffer_decode);
+       // bsp_websocket_send_text((char *)read_buffer,640*2,100);
         vTaskDelay(pdMS_TO_TICKS(10));
     }
-
-
-    
-
-    ESP_LOGI(TAG,"AUDIO_QUEUE CREATED");
-    // 创建 I2S 读取任务，分配到核心 0
-   // xTaskCreatePinnedToCore(i2s_read_task, "i2s_read_task", 4096, NULL, 5, NULL, 0);
-    ESP_LOGI(TAG,"I2S READ_TASK CREATED");
-    // 创建发送任务，分配到核心 1
-    xTaskCreatePinnedToCore(play_task, "socket_send_task", 4096, NULL, 5, NULL, 0);
-    ESP_LOGI(TAG,"SOCKET_SEND_TASK CREATED");
-    // bsp_ov3660_init();
-    // while(1)
-    // {
-    //     bsp_ov3660_camera_capture();
-    //     vTaskDelay(pdMS_TO_TICKS(10));
-    // }
 }
