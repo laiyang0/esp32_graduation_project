@@ -7,6 +7,7 @@ idf_component_register(
         "./bsp/bsp_enc_dec.c"
         "./bsp/bsp_wifi.c"
         "./bsp/bsp_websocket.c"
+        "./bsp/bsp_ring_buffer.c"
         "task.c"
         "qwen.c"
     INCLUDE_DIRS "."

@@ -25,6 +25,8 @@ extern "C" {
 #define CAM_PIN_D6 17
 #define CAM_PIN_D7 16
 
+#define CAM_I2C_PORT I2C_NUM_1
+
 esp_err_t bsp_ov3660_init();
 esp_err_t bsp_ov3660_deinit();
 esp_err_t bsp_ov3660_camera_capture();

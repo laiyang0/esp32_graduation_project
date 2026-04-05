@@ -23,7 +23,7 @@ extern "C" {
 // 屏幕参数
 #define BSP_LCD_H_RES        240          // 水平分辨率，请根据实际屏幕修改
 #define BSP_LCD_V_RES        240          // 垂直分辨率，请根据实际屏幕修改
-#define BSP_LCD_PIXEL_CLOCK_HZ (20 * 1000 * 1000) // SPI时钟频率，通常20MHz
+#define BSP_LCD_PIXEL_CLOCK_HZ (80 * 1000 * 1000) // SPI时钟频率，通常20MHz
 #define BSP_LCD_BITS_PER_PIXEL 16         // 每个像素的位数 (RGB565)
 
 

@@ -43,7 +43,7 @@ int bsp_websocket_send_text(const char* text,uint16_t length,int timeout_ms)
     } 
     else 
     {
-        ESP_LOGE(TAG, "发送文本成功: %d 字节", len);
+        //ESP_LOGE(TAG, "发送文本成功: %d 字节", len);
     }
     return len;
 }
@@ -173,7 +173,7 @@ void bsp_reconnect_task(void* arg) {
         // }
         
         // 休眠一段时间后再检查
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 //参数:ws_url:WebSocket服务器地址,ws_api_key:访问qwen的API密钥

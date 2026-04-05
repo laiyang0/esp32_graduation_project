@@ -21,7 +21,7 @@ static const char *TAG = "bsp_es8311";
 static i2s_chan_handle_t es8311_i2s_tx_handle = NULL;
 static i2s_chan_handle_t es8311_i2s_rx_handle = NULL;
 
-static i2c_master_bus_handle_t es8311_i2c_bus_handle=NULL;
+static i2c_master_bus_handle_t i2c_1_bus_handle=NULL;
 static esp_codec_dev_handle_t codec_handle = NULL; 
 
 
@@ -39,10 +39,16 @@ esp_err_t bsp_8311_init(void)
     bsp_8311_i2c_init();
     bsp_8311_i2s_init();
     /* Create control interface with I2C bus handle */
-    audio_codec_i2c_cfg_t i2c_cfg = {
+    // audio_codec_i2c_cfg_t i2c_cfg = {
+    //     .port = ES8311_I2C_PORT,
+    //     .addr = ES8311_I2C_ADDR,
+    //     .bus_handle =i2c_1_bus_handle,
+    // };
+    ESP_ERROR_CHECK(i2c_master_get_bus_handle(ES8311_I2S_PORT,&i2c_1_bus_handle));
+        audio_codec_i2c_cfg_t i2c_cfg = {
         .port = ES8311_I2C_PORT,
         .addr = ES8311_I2C_ADDR,
-        .bus_handle = es8311_i2c_bus_handle,
+        .bus_handle =i2c_1_bus_handle,
     };
     const audio_codec_ctrl_if_t *ctrl_if = audio_codec_new_i2c_ctrl(&i2c_cfg);
     assert(ctrl_if);
@@ -273,16 +279,16 @@ esp_err_t bsp_8311_play_music(void)
 static esp_err_t bsp_8311_i2c_init(void)
 {
     //新建i2c总线
-    i2c_master_bus_config_t i2c_mst_config = {
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .i2c_port = ES8311_I2C_PORT,
-        .scl_io_num = ES8311_I2C_SCL_PIN,
-        .sda_io_num = ES8311_I2C_SDA_PIN,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true,
-    };
+    // i2c_master_bus_config_t i2c_mst_config = {
+    //     .clk_source = I2C_CLK_SRC_DEFAULT,
+    //     .i2c_port = ES8311_I2C_PORT,
+    //     .scl_io_num = ES8311_I2C_SCL_PIN,
+    //     .sda_io_num = ES8311_I2C_SDA_PIN,
+    //     .glitch_ignore_cnt = 7,
+    //     .flags.enable_internal_pullup = true,
+    // };
 
-    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &es8311_i2c_bus_handle));
+    // ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &i2c_1_bus_handle));
 
     //为i2c总线挂载设备
     //此处不需要，因为调用audio_codec_new_i2c_ctrl时会自动挂载

@@ -2,6 +2,7 @@
 #include "esp_camera.h"
 #include "esp_log.h"
 #include "bsp_lcd.h"
+#include "driver/i2c_master.h"
 
 static const char *TAG = "BSP_OV3660";
 static camera_config_t camera_config = {
@@ -33,8 +34,8 @@ static camera_config_t camera_config = {
     .jpeg_quality = 12, //0-63, for OV series camera sensors, lower number means higher quality
     .fb_count = 1, //When jpeg mode is used, if fb_count more than one, the driver will work in continuous mode.
     .fb_location=CAMERA_FB_IN_PSRAM, //When using PSRAM, frame buffer should be allocated in PSRAM.
-    .grab_mode = CAMERA_GRAB_WHEN_EMPTY//CAMERA_GRAB_LATEST. Sets when buffers should be filled
-    //.sccb_i2c_port = BSP_I2C_NUM
+    .grab_mode = CAMERA_GRAB_WHEN_EMPTY,//CAMERA_GRAB_LATEST. Sets when buffers should be filled
+    .sccb_i2c_port =CAM_I2C_PORT,
 };
 
 esp_err_t bsp_ov3660_init()
@@ -44,7 +45,7 @@ esp_err_t bsp_ov3660_init()
         // pinMode(CAM_PIN_PWDN, OUTPUT);
         // digitalWrite(CAM_PIN_PWDN, LOW);
     }
-
+// sccb_use_port()
     //initialize the camera
     esp_err_t err = esp_camera_init(&camera_config);
     if (err != ESP_OK) {

@@ -5,3 +5,4 @@ phy_init, data, phy,     0xf000,  0x1000,
 factory,  app,  factory, 0x10000,  10M,
 
 # 自定义分区
+model,      data,   spiffs,      ,          5168K,

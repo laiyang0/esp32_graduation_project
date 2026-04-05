@@ -28,7 +28,7 @@ esp_err_t bsp_lcd_init(void)
         .miso_io_num = GPIO_NUM_NC,
         .quadwp_io_num =  GPIO_NUM_NC,
         .quadhd_io_num =  GPIO_NUM_NC,
-        .max_transfer_sz = BSP_LCD_H_RES * 40 * sizeof(uint16_t),
+        .max_transfer_sz = BSP_LCD_H_RES * 20 * sizeof(uint16_t),
     };
     ESP_ERROR_CHECK(spi_bus_initialize(BSP_LCD_SPI_NUM, &bus_config, SPI_DMA_CH_AUTO));
 
@@ -39,7 +39,7 @@ esp_err_t bsp_lcd_init(void)
         .pclk_hz = BSP_LCD_PIXEL_CLOCK_HZ,
         .lcd_cmd_bits = 8,
         .lcd_param_bits = 8,
-        .spi_mode = 0,                       // 标准SPI模式0
+        .spi_mode = 0,                       // 标准SPI模式3
         .trans_queue_depth = 10,
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)BSP_LCD_SPI_NUM, &io_config, &io_handle));
@@ -70,26 +70,38 @@ esp_err_t bsp_lcd_draw_buffer(uint16_t* buffer, uint32_t len, int width, int hei
 {
     // 在初始化屏幕后，分配一个屏幕大小的缓冲区
     // 注意：对于大屏幕，这个缓冲区会比较大 (240*320*2 ≈ 150KB)，请确保你的内存足够
-
-
-    return esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, width, height,buffer);
+    for(int i=0;i<height/20;i++)
+    {
+        esp_lcd_panel_draw_bitmap(panel_handle, 0, i*20, width, i*20+20,buffer+i*20*width);
+        vTaskDelay(pdMS_TO_TICKS(1));  // 给 SPI 队列时间处理
+    }
+    return ESP_OK;
+    
 }
 //整块屏幕刷新同一个颜色
 esp_err_t bsp_lcd_full_color(uint16_t color)
 {
     // 在初始化屏幕后，分配一个屏幕大小的缓冲区
     // 注意：对于大屏幕，这个缓冲区会比较大 (240*320*2 ≈ 150KB)，请确保你的内存足够
-    uint16_t *draw_buffer = heap_caps_malloc(BSP_LCD_H_RES*BSP_LCD_V_RES* sizeof(uint16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    //uint16_t *draw_buffer = heap_caps_malloc(20*BSP_LCD_H_RES* sizeof(uint16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    uint16_t *draw_buffer = heap_caps_malloc(20*BSP_LCD_H_RES* sizeof(uint16_t),  MALLOC_CAP_SPIRAM |MALLOC_CAP_8BIT);
     if (draw_buffer == NULL) {
         ESP_LOGE("LCD", "Failed to allocate draw buffer");
         return ESP_FAIL;
     }
 
     // 将整个缓冲区填充为红色 (RGB565 格式的红色为 0xF800)
-    for (int i = 0; i <BSP_LCD_H_RES*BSP_LCD_V_RES; i++) {
+    for (int i = 0; i <20*BSP_LCD_H_RES; i++) {
         draw_buffer[i] = color;
     }
-    ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, BSP_LCD_H_RES,BSP_LCD_V_RES, draw_buffer));
+
+    //底层dma内存大小不够，需要分批次刷新
+    for(int i=0;i<BSP_LCD_V_RES/20;i++)
+    {
+        ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel_handle, 0, i*20, BSP_LCD_H_RES,i*20+20, draw_buffer));
+         vTaskDelay(pdMS_TO_TICKS(1));  // 给 SPI 队列时间处理
+    }
+    
     free(draw_buffer);
     return ESP_OK;
 }
