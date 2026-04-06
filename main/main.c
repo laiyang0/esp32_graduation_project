@@ -30,6 +30,7 @@
 
 #include "cJSON.h"
 #include "qwen.h"
+#include "app_sr.h"
 
 
 
@@ -59,53 +60,12 @@ static QueueHandle_t websocket_queue;
 
 
 // 定义全局缓冲区
-static int16_t i2s_read_buffer_global[I2S_BUF_SIZE];
-static int16_t discard_buffer_global[QUEUE_ITEM_SIZE];
+// static int16_t i2s_read_buffer_global[I2S_BUF_SIZE];
+// static int16_t discard_buffer_global[QUEUE_ITEM_SIZE];
 
 bsp_ring_buffer_t *audio_ring_buffer=NULL;   //音频环形缓冲区
 
 static size_t ring_buffer_write_count=0; //计算写入音频环形缓冲区的次数
-
-// 读取 I2S 数据并发送到队列
-void i2s_read_task(void *param) {
-    size_t bytes_read;
-
-    while (1) {
-        // 从 I2S 读取数据
-        // esp_err_t ret = i2s_read(I2S_NUM, (void *)i2s_read_buffer_global,
-        //                          sizeof(i2s_read_buffer_global),
-        //                          &bytes_read,
-        //                          portMAX_DELAY);
-        // if (ret != ESP_OK || bytes_read == 0) {
-        //     printf("i2s_read error or zero bytes (%d). Retrying...\n", bytes_read);
-        //     vTaskDelay(pdMS_TO_TICKS(100));
-        //     continue;
-        // }
-        esp_err_t ret = bsp_8311_read(i2s_read_buffer_global, I2S_BUF_SIZE*2);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Read failed: %s", esp_err_to_name(ret));
-            continue;
-        }
-        // ESP_LOGI(TAG, "read:%d",bytes_read);
-        // printf("Read bytes from I2S: %d\n", bytes_read);
-
-        // 发送数据到队列
-        if (xQueueSend(audio_queue, i2s_read_buffer_global, 0) != pdPASS) {  // 修改为 i2s_read_buffer_global
-            // 如果发送失败，移除最旧的数据
-            if (xQueueReceive(audio_queue, discard_buffer_global, 0) == pdPASS) {
-
-                printf("Queue full, discarded oldest data.\n");
-            }
-            // 尝试再次发送
-            if (xQueueSend(audio_queue, i2s_read_buffer_global, 0) != pdPASS) {  // 修改为 i2s_read_buffer_global
-                printf("Queue full, discard new data.\n");
-            }
-        }
-    }
-}
-
-
-
 
 
 
@@ -512,7 +472,7 @@ void app_main(void) {
     //bsp_8311_record_play_test();
     //bsp_8311_play_music();
 
-
+    
 
 
     xTaskCreatePinnedToCore(qwen_message_handle_task, "qwen_message_handle_task", 4096, NULL, 4, NULL, 1);
@@ -521,29 +481,23 @@ void app_main(void) {
     {
         ESP_LOGE(TAG,"lcd_show_task_create_failed");
     }
-    char *read_buffer = heap_caps_malloc(640, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);      //读出的原始音频数据
-    char *read_buffer_encode=heap_caps_malloc(857,MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);//base64编码后的字符数据
+    app_sr_init();  //初始化语音模块
+    // app_sr_test();
+    // char *read_buffer = heap_caps_malloc(640, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);      //读出的原始音频数据
+    // char *read_buffer_encode=heap_caps_malloc(857,MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);//base64编码后的字符数据
 
     size_t encode_len=0;
-    size_t count=0;
+
     while(1)
     {
-        // if(bsp_8311_read(read_buffer,640*2)!=ESP_OK)
-        // {
-        //     ESP_LOGE(TAG,"BSP_8311_READ_ERROR");
-        // }
-        // else{
-        //     bsp_websocket_send_bin((char *)read_buffer,640*2,100);
-        // }
-    print_memory_info();
-        bsp_8311_read(read_buffer,640);
-        bsp_enc_dec_encode_base64((uint8_t *)read_buffer,640,read_buffer_encode,857,&encode_len);  //原始PCM数据编码成base64
-        ESP_LOGE(TAG,"encode_len:%d",encode_len);
-                        qwen_send_audio(read_buffer_encode,encode_len);
 
-        // bsp_enc_dec_decode_base64(read_buffer_encode,(uint8_t *)read_buffer_decode,1000,&encode_len);
-        // ESP_LOGE(TAG,"decode_len:%d,decode_data:%s",encode_len,read_buffer_decode);
-       // bsp_websocket_send_text((char *)read_buffer,640*2,100);
+    print_memory_info();
+        // bsp_8311_read(read_buffer,640);
+        // bsp_enc_dec_encode_base64((uint8_t *)read_buffer,640,read_buffer_encode,857,&encode_len);  //原始PCM数据编码成base64
+        // ESP_LOGE(TAG,"encode_len:%d",encode_len);
+        //                 qwen_send_audio(read_buffer_encode,encode_len);
+
+
         vTaskDelay(pdMS_TO_TICKS(18));
     }
 }

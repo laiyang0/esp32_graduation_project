@@ -28,8 +28,8 @@ static esp_codec_dev_handle_t codec_handle = NULL;
 static esp_err_t bsp_8311_i2c_init(void);
 static esp_err_t bsp_8311_i2s_init(void);
 
-extern const uint8_t pcm_start[] asm("_binary_music_pcm_start");
-extern const uint8_t pcm_end[]   asm("_binary_music_pcm_end");
+// extern const uint8_t pcm_start[] asm("_binary_music_pcm_start");
+// extern const uint8_t pcm_end[]   asm("_binary_music_pcm_end");
 
 
 #define EXAMPLE_BUFF_SIZE 2024
@@ -211,26 +211,25 @@ esp_err_t bsp_8311_record_play_opus_test(void)
 //该方法基于将原始文件嵌入固件中直接下载，而不基于分区
 esp_err_t bsp_8311_play_music(void)
 {    
-        // ESP_ERROR_CHECK(esp_codec_dev_write(codec_handle, sine_wave, PLAYBACK_BUFFER_SIZE * sizeof(int16_t)));
-        // free(sine_wave);
-    uint16_t *buffer = calloc(1, EXAMPLE_BUFF_SIZE * 2);
-    esp_codec_dev_set_out_vol(codec_handle, 75);
-    uint32_t offset = 0;
-    while (1) {
-        /* Write i2s data */
-        ESP_ERROR_CHECK(bsp_8311_write( buffer, EXAMPLE_BUFF_SIZE * sizeof(int16_t)));
-        if (offset>(pcm_end-pcm_start)){
-            break;
-        }
-        for (int i = 0; i < EXAMPLE_BUFF_SIZE; i++) {
-            offset++;
-            buffer[i] = pcm_start[offset]<<7;
-        }
-        printf("size %d\noffset %lu\n", pcm_end-pcm_start,offset);
 
-    }
-    //ESP_ERROR_CHECK(i2s_channel_disable(tx_chan));
-    free(buffer);
+    // uint16_t *buffer = calloc(1, EXAMPLE_BUFF_SIZE * 2);
+    // esp_codec_dev_set_out_vol(codec_handle, 75);
+    // uint32_t offset = 0;
+    // while (1) {
+    //     /* Write i2s data */
+    //     ESP_ERROR_CHECK(bsp_8311_write( buffer, EXAMPLE_BUFF_SIZE * sizeof(int16_t)));
+    //     if (offset>(pcm_end-pcm_start)){
+    //         break;
+    //     }
+    //     for (int i = 0; i < EXAMPLE_BUFF_SIZE; i++) {
+    //         offset++;
+    //         buffer[i] = pcm_start[offset]<<7;
+    //     }
+    //     printf("size %d\noffset %lu\n", pcm_end-pcm_start,offset);
+
+    // }
+    // //ESP_ERROR_CHECK(i2s_channel_disable(tx_chan));
+    // free(buffer);
     return ESP_OK;
 }
 // //该方法基于将原始文件存放在spiffs分区中，通过spiffs_vfs_register注册，然后通过vfs_open读取文件

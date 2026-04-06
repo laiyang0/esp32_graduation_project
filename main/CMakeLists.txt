@@ -8,7 +8,7 @@ idf_component_register(
         "./bsp/bsp_wifi.c"
         "./bsp/bsp_websocket.c"
         "./bsp/bsp_ring_buffer.c"
-        "task.c"
+        "app_sr.c"
         "qwen.c"
     INCLUDE_DIRS "."
         "./bsp"
@@ -27,7 +27,7 @@ idf_component_register(
             esp_eth
             esp_wifi
      INCLUDE_DIRS "${IDF_PATH}/components/esp_common/include"
-    EMBED_FILES music.pcm
+    # EMBED_FILES music.pcm #直接打包music.pcm文件到app分区
 )
 
 # 传递编译定义
@@ -35,7 +35,7 @@ target_compile_definitions(${COMPONENT_LIB} PRIVATE
     DASHSCOPE_API_KEY="${DASHSCOPE_API_KEY}"
     DASHSCOPE_MODEL="${DASHSCOPE_MODEL}"
 )
-
+spiffs_create_partition_image(storage ../spiffs FLASH_IN_PROJECT)
 # spiffs_create_partition_assets(
 #     music
 #     "../music"

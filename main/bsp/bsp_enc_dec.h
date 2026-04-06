@@ -12,7 +12,7 @@ extern "C"{
 #define BSP_ENC_COMPLEXITY 0
 
 //important!!!  
-//编解码任务的栈区占用较高，运行音频处理任务的栈区需要足够大，否则会导致栈溢出。
+//opus编解码任务的栈区占用较高，运行音频处理任务的栈区需要足够大，否则会导致栈溢出。
 esp_err_t bsp_enc_dec_init(void);
 esp_err_t bsp_enc_dec_deinit(void);
 esp_err_t bsp_enc_dec_encode(void *pcm_buf, uint32_t pcm_len, void *enc_buf, uint32_t enc_len_in,uint32_t *enc_len_out);

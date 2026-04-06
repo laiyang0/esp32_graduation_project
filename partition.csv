@@ -2,7 +2,8 @@
 # Name,   Type, SubType, Offset,  Size, Flags
 nvs,      data, nvs,     0x9000,  0x4000,
 phy_init, data, phy,     0xf000,  0x1000,
-factory,  app,  factory, 0x10000,  10M,
+factory,  app,  factory, 0x10000,  4M,
 
 # 自定义分区
 model,      data,   spiffs,      ,          5168K,
+storage,      data,   spiffs,      ,         6M,
