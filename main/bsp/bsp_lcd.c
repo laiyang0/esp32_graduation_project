@@ -47,7 +47,9 @@ esp_err_t bsp_lcd_init(void)
     // 配置ST7789面板
     esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = BSP_LCD_RST,   //不使用reset
-        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB, // 颜色顺序，如果显示颜色不对可尝试改为BGR [citation:7]
+        // .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB, // 颜色顺序，如果显示颜色不对可尝试改为BGR [citation:7]
+        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
+        .color_space=ESP_LCD_COLOR_SPACE_RGB,
         .bits_per_pixel = BSP_LCD_BITS_PER_PIXEL,
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(io_handle, &panel_config, &panel_handle));
@@ -70,6 +72,10 @@ esp_err_t bsp_lcd_draw_buffer(uint16_t* buffer, uint32_t len, int width, int hei
 {
     // 在初始化屏幕后，分配一个屏幕大小的缓冲区
     // 注意：对于大屏幕，这个缓冲区会比较大 (240*320*2 ≈ 150KB)，请确保你的内存足够
+    for(size_t i=0;i<len/2;i++)
+    {
+        buffer[i]=~((buffer[i]>>11)|(buffer[i]&0x001f));
+    }
     for(int i=0;i<height/20;i++)
     {
         esp_lcd_panel_draw_bitmap(panel_handle, 0, i*20, width, i*20+20,buffer+i*20*width);

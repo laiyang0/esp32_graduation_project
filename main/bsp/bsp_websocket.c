@@ -106,8 +106,8 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
     case WEBSOCKET_EVENT_DATA:
             ESP_LOGI(TAG, "收到WebSocket数据，长度: %d 字节, op_code: 0x%02x", 
                     data->data_len, data->op_code);
-            ESP_LOGI(TAG, "pay_len:%d, pay_offset:%d", 
-                    data->payload_len, data->payload_offset);
+            // ESP_LOGI(TAG, "pay_len:%d, pay_offset:%d", 
+            //         data->payload_len, data->payload_offset);
                     
             event.data = (uint8_t*)data->data_ptr;
             event.data_len = data->data_len;
