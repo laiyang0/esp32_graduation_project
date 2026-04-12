@@ -27,11 +27,14 @@
 #include "bsp_wifi.h"
 #include "bsp_websocket.h"
 #include "bsp_ring_buffer.h"
+#include "ui_init.h"
 
 #include "cJSON.h"
 #include "qwen.h"
 #include "app_sr.h"
-
+#include "lvgl.h"
+#include "esp_lvgl_port.h"
+#include "lv_demos.h"
 
 
 #include <dirent.h>
@@ -351,7 +354,7 @@ void qwen_message_handle_task(void *arg) {
             }
             
         }
-        vTaskDelay(pdMS_TO_TICKS(1));
+        vTaskDelay(pdMS_TO_TICKS(2));
     }
 }
 void play_task(void *arg)
@@ -377,10 +380,11 @@ void play_task(void *arg)
         }
         if(read_len!=640)
         {
-            ESP_LOGE(TAG,"ring_buffer read:%d",read_len);
+            //ESP_LOGE(TAG,"ring_buffer read:%d",read_len);
         }
         if(read_len!=0)
         {
+            //ESP_LOGE(TAG,"rb_write:%d,read:%d",audio_ring_buffer->write_index,audio_ring_buffer->read_index);
             bsp_8311_write(read_buffer,read_len);
         }
         vTaskDelay(pdMS_TO_TICKS(18)); 
@@ -391,7 +395,7 @@ void lcd_show_task(void *arg)
     ESP_LOGI(TAG,"LCD_SHOW_TASK start");
     while(1)
     {
-        bsp_ov3660_camera_capture();
+        //bsp_ov3660_camera_capture();
         //bsp_lcd_full_color(0Xe6fa);
         //ESP_LOGI(TAG,"LCD_SHOW_RUNNING");
         vTaskDelay(pdMS_TO_TICKS(20));
@@ -399,8 +403,11 @@ void lcd_show_task(void *arg)
 }
 void print_memory_info() {
     ESP_LOGE(TAG,"Free heap: %d bytes", esp_get_free_heap_size());
+    ESP_LOGE(TAG,"Internal Free heap: %d bytes", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    ESP_LOGE(TAG,"Internal total heap: %d bytes", heap_caps_get_total_size(MALLOC_CAP_INTERNAL));
     ESP_LOGE(TAG,"Largest free block: %d bytes", heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
     ESP_LOGE(TAG,"Free DMA memory: %d bytes", heap_caps_get_free_size(MALLOC_CAP_DMA));
+    // heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
 }
 void app_main(void) {
     // 初始化NVS
@@ -430,8 +437,25 @@ void app_main(void) {
         ESP_LOGI("ESP8311","BSP_8311_INIT SUCCESS");
     }
     else{
-        ESP_LOGE("ESP8311","BSP_8311_INIT FAILD");
+        ESP_LOGE("ESP8311","BSP_8311_INIT FAIprint_memory_info();D");
     }
+        ESP_LOGE(TAG,"RUNNING IN LVGL");
+    print_memory_info();
+    app_lvgl_init();
+    print_memory_info();
+    lvgl_port_lock(0);
+    // lv_obj_t * button = lv_button_create(lv_screen_active());
+    // lv_obj_center(button);
+    // lv_obj_set_height(button,100);
+    // lv_obj_set_width(button,100);
+    // lv_obj_set_style_bg_color(button, lv_color_hex(0x1976D2), LV_STATE_DEFAULT); // 蓝色背景
+    // lv_obj_set_style_text_color(button, lv_color_hex(0xFFFFFF), LV_STATE_DEFAULT); // 白色文本
+
+    // lv_obj_t * label = lv_label_create(button);
+    // lv_label_set_text(label, "Hello from LVGL!");
+    lv_demo_benchmark();
+    lvgl_port_unlock(); 
+    print_memory_info();
     //初始化wifi,连接wifi网络
     ESP_ERROR_CHECK(bsp_wifi_init());
         // 创建二值信号量
@@ -497,8 +521,8 @@ void app_main(void) {
     
 
 
-    xTaskCreatePinnedToCore(qwen_message_handle_task, "qwen_message_handle_task", 4096, NULL, 4, NULL, 1);
-    xTaskCreatePinnedToCore(play_task, "play_task", 8192, NULL, 3, NULL, 0);
+    xTaskCreatePinnedToCore(qwen_message_handle_task, "qwen_message_handle_task", 4096, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(play_task, "play_task", 4*1024, NULL, 5, NULL, 0);
     if(xTaskCreatePinnedToCore(lcd_show_task, "lcd_show_task", 4096, NULL, 2, NULL, 0)!=pdPASS)
     {
         ESP_LOGE(TAG,"lcd_show_task_create_failed");
@@ -510,22 +534,36 @@ void app_main(void) {
     }
     qwen_init();
     app_sr_init();  //初始化语音模块
+    
     // app_sr_test();
     // char *read_buffer = heap_caps_malloc(640, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);      //读出的原始音频数据
     // char *read_buffer_encode=heap_caps_malloc(857,MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);//base64编码后的字符数据
 
     size_t encode_len=0;
 
+    // ESP_LOGE(TAG,"RUNNING IN LVGL");
+
+    // lvgl_port_lock(0);
+    // // lv_obj_t * button = lv_button_create(lv_screen_active());
+    // // lv_obj_center(button);
+    // // lv_obj_set_height(button,100);
+    // // lv_obj_set_width(button,100);
+
+    // // lv_obj_t * label = lv_label_create(button);
+    // // lv_label_set_text(label, "Hello from LVGL!");
+    // lv_demo_benchmark();
+    // lvgl_port_unlock(); 
+         
     while(1)
     {
 
-        //print_memory_info();
         // bsp_8311_read(read_buffer,640);
         // bsp_enc_dec_encode_base64((uint8_t *)read_buffer,640,read_buffer_encode,857,&encode_len);  //原始PCM数据编码成base64
         // ESP_LOGE(TAG,"encode_len:%d",encode_len);
         //                 qwen_send_audio(read_buffer_encode,encode_len);
-
-
-        vTaskDelay(pdMS_TO_TICKS(100));
+        UBaseType_t high_water_mark_words = uxTaskGetStackHighWaterMark(NULL);
+        ESP_LOGE(TAG,"main_words:%d",high_water_mark_words);
+        print_memory_info();
+        vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }

@@ -1,8 +1,6 @@
 #include "bsp_lcd.h"
 #include "esp_log.h"
-#include "esp_lcd_io_spi.h"
-#include "esp_lcd_panel_st7789.h"
-#include "esp_lcd_panel_ops.h"
+
 
 esp_lcd_panel_io_handle_t io_handle = NULL;
 esp_lcd_panel_handle_t panel_handle = NULL;
@@ -40,7 +38,7 @@ esp_err_t bsp_lcd_init(void)
         .lcd_cmd_bits = 8,
         .lcd_param_bits = 8,
         .spi_mode = 0,                       // 标准SPI模式3
-        .trans_queue_depth = 10,
+        .trans_queue_depth = 4,
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)BSP_LCD_SPI_NUM, &io_config, &io_handle));
 

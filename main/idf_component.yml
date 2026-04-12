@@ -23,3 +23,5 @@ dependencies:
 
   espressif/esp_websocket_client: ^1.6.1
 
+  lvgl/lvgl: ^9.5.0
+  espressif/esp_lvgl_port: ^2.7.2

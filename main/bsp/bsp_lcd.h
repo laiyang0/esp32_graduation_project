@@ -9,6 +9,9 @@ extern "C" {
 #include "esp_err.h"
 
 #include "driver/gpio.h"
+#include "esp_lcd_io_spi.h"
+#include "esp_lcd_panel_st7789.h"
+#include "esp_lcd_panel_ops.h"
 // SPI 引脚
 #define BSP_LCD_SPI_NUM       SPI3_HOST   // 使用的SPI主机
 #define BSP_LCD_SPI_CLK      GPIO_NUM_21  // 时钟引脚 (SCLK)
@@ -26,7 +29,8 @@ extern "C" {
 #define BSP_LCD_PIXEL_CLOCK_HZ (80 * 1000 * 1000) // SPI时钟频率，通常20MHz
 #define BSP_LCD_BITS_PER_PIXEL 16         // 每个像素的位数 (RGB565)
 
-
+extern esp_lcd_panel_io_handle_t io_handle;
+extern esp_lcd_panel_handle_t panel_handle;
 
 esp_err_t bsp_lcd_init(void);
 esp_err_t bsp_lcd_backlight_on(void);

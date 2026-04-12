@@ -7,8 +7,9 @@
 
     // 📦 内部配置常量
 static const int BUFFER_SIZE = 4096;                // 数据缓冲区大小（4KB）
-static const int TASK_STACK_SIZE = 8192;            // WebSocket任务栈大小
-static const int RECONNECT_TASK_STACK_SIZE = 4096;  // 重连任务栈大小
+// static const int TASK_STACK_SIZE = 8192;            // WebSocket任务栈大小
+static const int TASK_STACK_SIZE = 6144;            // WebSocket任务栈大小
+// static const int RECONNECT_TASK_STACK_SIZE = 4096;  // 重连任务栈大小
 // 🌐 WebSocket服务器配置
 #define WS_URI "ws://192.168.213.250:8888" // 请改为您的电脑IP地址:8888
 
@@ -228,11 +229,11 @@ esp_err_t bsp_websocket_init(const char *ws_url,const char *ws_api_key)
     }
 
     // 🔁 创建自动重连任务
-    if (reconnect_task_handle_==NULL) {
-        xTaskCreate(bsp_reconnect_task, "bsp_reconnect_task", RECONNECT_TASK_STACK_SIZE, 
-                   NULL, 5, &reconnect_task_handle_);
-        ESP_LOGI(TAG, "自动重连任务已启动");
-    }
+    // if (reconnect_task_handle_==NULL) {
+    //     xTaskCreate(bsp_reconnect_task, "bsp_reconnect_task", RECONNECT_TASK_STACK_SIZE, 
+    //                NULL, 5, &reconnect_task_handle_);
+    //     ESP_LOGI(TAG, "自动重连任务已启动");
+    // }
     return ESP_OK;
 }
 //判断websocket是否成功连接

@@ -8,10 +8,12 @@ idf_component_register(
         "./bsp/bsp_wifi.c"
         "./bsp/bsp_websocket.c"
         "./bsp/bsp_ring_buffer.c"
+        "./ui/ui_init.c"
         "app_sr.c"
         "qwen.c"
     INCLUDE_DIRS "."
         "./bsp"
+        "./ui"
     REQUIRES esp_driver_i2s
             esp_driver_i2c
             # espressif__esp_codec_dev
@@ -26,6 +28,7 @@ idf_component_register(
             esp_netif
             esp_eth
             esp_wifi
+            lvgl
      INCLUDE_DIRS "${IDF_PATH}/components/esp_common/include"
     # EMBED_FILES music.pcm #直接打包music.pcm文件到app分区
 )
