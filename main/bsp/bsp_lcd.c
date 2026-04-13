@@ -53,6 +53,7 @@ esp_err_t bsp_lcd_init(void)
     ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(io_handle, &panel_config, &panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
+    esp_lcd_panel_invert_color(panel_handle, true);
     ESP_ERROR_CHECK(bsp_lcd_backlight_on());
     return ESP_OK;
 }

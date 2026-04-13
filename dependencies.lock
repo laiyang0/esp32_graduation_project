@@ -150,6 +150,6 @@ direct_dependencies:
 - espressif/esp_websocket_client
 - idf
 - lvgl/lvgl
-manifest_hash: f4ebde799f151f00604ed196c4906c344d699fb5a5c401ef6989f2e2012fadb6
+manifest_hash: eefe87823e59794a5c412f0177adad0870e5f4245c2fff46d055c5cb23f3b2ef
 target: esp32s3
 version: 2.0.0

@@ -9,6 +9,11 @@
 #include "esp_afe_sr_models.h"
 #include "esp_mn_speech_commands.h"
 #include "esp_mn_models.h"
+#include "esp_wn_iface.h"
+#include "esp_wn_models.h"
+#include "esp_afe_sr_iface.h"
+#include "esp_mn_iface.h"
+
 
 #include "model_path.h"
 #include "esp_vad.h"
@@ -65,7 +70,13 @@ static void audio_feed_task(void *pvParam)
         if(!is_connect_qianwen)
         {
             bsp_8311_read(audio_buffer,audio_chunksize*sizeof(int16_t));    //读出初始的音频数据
-        }
+            for (int  i = audio_chunksize - 1; i >= 0; i--) //将音频数据填写为双通道，扬声器通道数据默认为0，不使用
+            {
+                audio_buffer[i * 2 + 1] = 0;
+                audio_buffer[i * 2 + 0] = audio_buffer[i];
+            }
+            afe_handle->feed(afe_data, audio_buffer);
+            }
         //if(xEventGroupWaitBits(audio_qianwen_eventgroup,AUDIO_WRITE_IN_RB_BIT,pdFALSE,pdFALSE,0)&AUDIO_WRITE_IN_RB_BIT)   //
         if(is_connect_qianwen)
         {
@@ -83,12 +94,7 @@ static void audio_feed_task(void *pvParam)
             //xEventGroupSetBits(audio_qianwen_eventgroup,AUDIO_QWEN_BIT);
         }
         // if()
-        for (int  i = audio_chunksize - 1; i >= 0; i--) //将音频数据填写为双通道，扬声器通道数据默认为0，不使用
-        {
-            audio_buffer[i * 2 + 1] = 0;
-            audio_buffer[i * 2 + 0] = audio_buffer[i];
-        }
-        afe_handle->feed(afe_data, audio_buffer);
+
         // UBaseType_t high_water_mark_words = uxTaskGetStackHighWaterMark(NULL);
         // ESP_LOGE(TAG,"audio_feed:%d",high_water_mark_words);
         vTaskDelay(pdMS_TO_TICKS(30));
@@ -97,7 +103,7 @@ static void audio_feed_task(void *pvParam)
 }
 static void audio_detect_task(void *pvParam)
 {
-    bool mn_word_detect_flag = false;   //是否开启命令词检测
+    bool mn_word_detect_flag =false;   //是否开启命令词检测
     esp_afe_sr_data_t *afe_data = (esp_afe_sr_data_t *) pvParam;
 
     /* Check audio data chunksize */
@@ -110,75 +116,81 @@ static void audio_detect_task(void *pvParam)
     // char *read_buffer_encode=heap_caps_malloc(4001,MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);//base64编码后的字符数据
     while(1)
     {
-        // result = afe_handle->fetch(afe_data);   //AFE数据也是通过环形缓冲区实现
-        result = afe_handle->fetch_with_delay(afe_data, 100 / portTICK_PERIOD_MS);
-        if (result==NULL || result->ret_value == ESP_FAIL) {
-            ESP_LOGE(TAG, "fetch error!");
-            vTaskDelay(pdMS_TO_TICKS(5));
-            continue;
-        }
-        //int16_t *processed_audio = result->data;
-        //ESP_LOGE(TAG,"data_size:%d",result->data_size);
-        vad_state_t vad_state = result->vad_state;
-        wakenet_state_t wakeup_state = result->wakeup_state;
-        if(wakeup_state==WAKENET_DETECTED)
+        if(!is_connect_qianwen)
         {
-            mn_word_detect_flag = true;
-            afe_handle->disable_wakenet(afe_data);
-            ESP_LOGI(TAG,"WAKEUP_DETECTED");
-        }
-        else if(wakeup_state==WAKENET_CHANNEL_VERIFIED)
-        {
-            ESP_LOGE(TAG,"WAKEUP_CHANNEL_VERIFIED");
-        }
-        if(mn_word_detect_flag)
-        {
-            esp_mn_state_t mn_state = ESP_MN_STATE_DETECTING;
-            if(multinet==NULL)
-            {
-                ESP_LOGE(TAG,"multinet is NULL");
-            }
-            else{
-                ESP_LOGI(TAG,"multinet is inited");
-            }
-            mn_state = multinet->detect(model_data, result->data);
-            ESP_LOGE(TAG,"multinet detected");
-
-            if (ESP_MN_STATE_DETECTING == mn_state) //命令词检测中
-            {
+            result = afe_handle->fetch(afe_data);   //AFE数据也是通过环形缓冲区实现
+            //result = afe_handle->fetch_with_delay(afe_data, 100 / portTICK_PERIOD_MS);
+            if (result==NULL || result->ret_value == ESP_FAIL) {
+                ESP_LOGE(TAG, "fetch error!");
                 vTaskDelay(pdMS_TO_TICKS(5));
                 continue;
             }
-
-            if (ESP_MN_STATE_TIMEOUT == mn_state) //命令词检测超时
+            //int16_t *processed_audio = result->data;
+            //ESP_LOGE(TAG,"data_size:%d",result->data_size);
+            vad_state_t vad_state = result->vad_state;
+            wakenet_state_t wakeup_state = result->wakeup_state;
+            if(wakeup_state==WAKENET_DETECTED)
             {
-                ESP_LOGW(TAG, "mn_state: Time out");  
-                afe_handle->enable_wakenet(afe_data);   //重新打开唤醒词网络
-                mn_word_detect_flag = false;
-                vTaskDelay(pdMS_TO_TICKS(5));
-                continue;
+                mn_word_detect_flag = true;
+                afe_handle->disable_wakenet(afe_data);
+                ESP_LOGI(TAG,"WAKEUP_DETECTED");
             }
-            if(ESP_MN_STATE_DETECTED == mn_state)   //成功检测出命令词
+            else if(wakeup_state==WAKENET_CHANNEL_VERIFIED)
             {
-                esp_mn_results_t *mn_result = multinet->get_results(model_data);    ///mn_result->prob代表置信度，第一个是置信度最高的命令
-                for (int i = 0; i < mn_result->num; i++) {
-                    ESP_LOGE(TAG, "TOP %d, command_id: %d, phrase_id: %d, prob: %f",
-                            i + 1, mn_result->command_id[i], mn_result->phrase_id[i], mn_result->prob[i]);
-                }
-                if(mn_result->command_id[0]==0) //连接千问
+                ESP_LOGE(TAG,"WAKEUP_CHANNEL_VERIFIED");
+            }
+            if(mn_word_detect_flag)
+            {
+                esp_mn_state_t mn_state = ESP_MN_STATE_DETECTING;
+                if(multinet==NULL)
                 {
-                    is_connect_qianwen=true;
-                    xEventGroupSetBits(audio_qianwen_eventgroup,AUDIO_WRITE_IN_RB_BIT);
-                    //xEventGroupSetBits(audio_qianwen_eventgroup,AUDIO_QWEN_BIT);
+                    ESP_LOGE(TAG,"multinet is NULL");
                 }
-                else if(mn_result->command_id[0]==1)
+                else{
+                    //ESP_LOGI(TAG,"multinet is inited");
+                }
+                mn_state = multinet->detect(model_data, result->data);
+                //ESP_LOGE(TAG,"multinet detected");
+
+                if (ESP_MN_STATE_DETECTING == mn_state) //命令词检测中
                 {
-                    xEventGroupClearBits(audio_qianwen_eventgroup,AUDIO_WRITE_IN_RB_BIT);
-                    xEventGroupClearBits(audio_qianwen_eventgroup,AUDIO_QWEN_BIT);
-                    is_connect_qianwen=false;
+                    vTaskDelay(pdMS_TO_TICKS(5));
+                    continue;
+                }
+
+                if (ESP_MN_STATE_TIMEOUT == mn_state) //命令词检测超时
+                {
+                    ESP_LOGW(TAG, "mn_state: Time out");  
+                     afe_handle->enable_wakenet(afe_data);   //重新打开唤醒词网络
+                    mn_word_detect_flag = false;
+                    vTaskDelay(pdMS_TO_TICKS(5));
+                    continue;
+                }
+                if(ESP_MN_STATE_DETECTED == mn_state)   //成功检测出命令词
+                {
+                    esp_mn_results_t *mn_result = multinet->get_results(model_data);    ///mn_result->prob代表置信度，第一个是置信度最高的命令
+                    for (int i = 0; i < mn_result->num; i++) {
+                        ESP_LOGE(TAG, "TOP %d, command_id: %d, phrase_id: %d, prob: %f",
+                                i + 1, mn_result->command_id[i], mn_result->phrase_id[i], mn_result->prob[i]);
+                    }
+                    if(mn_result->command_id[0]==0) //连接千问
+                    {
+                        is_connect_qianwen=true;
+                        //afe_handle->disable_se(afe_data);   //重新打开唤醒词网络
+                        // mn_word_detect_flag=false;
+                        xEventGroupSetBits(audio_qianwen_eventgroup,AUDIO_WRITE_IN_RB_BIT);
+                        //xEventGroupSetBits(audio_qianwen_eventgroup,AUDIO_QWEN_BIT);
+                    }
+                    else if(mn_result->command_id[0]==1)
+                    {
+                        xEventGroupClearBits(audio_qianwen_eventgroup,AUDIO_WRITE_IN_RB_BIT);
+                        xEventGroupClearBits(audio_qianwen_eventgroup,AUDIO_QWEN_BIT);
+                        is_connect_qianwen=false;
+                    }
                 }
             }
         }
+
         // UBaseType_t high_water_mark_words = uxTaskGetStackHighWaterMark(NULL);
         // ESP_LOGE(TAG,"audio_detect:%d",high_water_mark_words);
         vTaskDelay(pdMS_TO_TICKS(5));
@@ -238,18 +250,18 @@ esp_err_t app_sr_init(void)
     // afe_config->vad_init = false;       //关闭vad静音检测(测试使用)
     
     afe_handle = esp_afe_handle_from_config(afe_config);    //获取afe句柄
-
     esp_afe_sr_data_t *afe_data = afe_handle->create_from_config(afe_config);   //创建afe_sr实例
-    ESP_LOGI(TAG, "load wakenet:%s", afe_config->wakenet_model_name);
+    afe_config_free(afe_config);    //释放afe_config配置参数
+    // ESP_LOGI(TAG, "load wakenet:%s", afe_config->wakenet_model_name);
 
-    char *mn_name = esp_srmodel_filter(models, ESP_MN_CHINESE, NULL);   //命令词网络模型
+    char *mn_name = esp_srmodel_filter(models, ESP_MN_PREFIX, ESP_MN_CHINESE);   //命令词网络模型
     if (NULL == mn_name) {
         ESP_LOGE(TAG, "No multinet model found");
         return ESP_FAIL;
     }
 
     multinet = esp_mn_handle_from_name(mn_name);
-    model_data = multinet->create(mn_name, 5760);
+    model_data = multinet->create(mn_name, 6000);
     ESP_LOGI(TAG, "load multinet:%s", mn_name);
 
     esp_mn_commands_clear();
@@ -277,10 +289,10 @@ esp_err_t app_sr_init(void)
     BaseType_t ret_val = xTaskCreatePinnedToCore(audio_feed_task, "audio_feed_task", 3 * 1024, afe_data, 10, NULL, 0);
     ESP_RETURN_ON_FALSE(pdPASS == ret_val, ESP_FAIL, TAG,  "Failed create audio feed task");
 
-    ret_val = xTaskCreatePinnedToCore(audio_detect_task, "audio_detect_task", 6 * 1024, afe_data, 11, NULL, 0);
+    ret_val = xTaskCreatePinnedToCore(audio_detect_task, "audio_detect_task", 5 * 1024, afe_data, 11, NULL,1);
     ESP_RETURN_ON_FALSE(pdPASS == ret_val, ESP_FAIL, TAG,  "Failed create audio detect task");
 
-    ret_val = xTaskCreatePinnedToCore(audio_qianwen_task, "audio_qianwen_task", 3 * 1024, NULL,15, NULL, 1);   //提高该任务优先级
+    ret_val = xTaskCreatePinnedToCore(audio_qianwen_task, "audio_qianwen_task", 3 * 1024, NULL,15, NULL, 0);   //提高该任务优先级
     ESP_RETURN_ON_FALSE(pdPASS == ret_val, ESP_FAIL, TAG,  "Failed create audio handler task");
     return ESP_OK;
 }

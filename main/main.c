@@ -36,7 +36,7 @@
 #include "esp_lvgl_port.h"
 #include "lv_demos.h"
 
-
+#include "esp_camera.h"
 #include <dirent.h>
 #include <sys/stat.h>   // 如果需要 stat 等函数
 // WiFi配置
@@ -393,12 +393,28 @@ void play_task(void *arg)
 void lcd_show_task(void *arg)
 {
     ESP_LOGI(TAG,"LCD_SHOW_TASK start");
+    lv_obj_t *canvas1=NULL;
+    canvas1 = lv_canvas_create(lv_scr_act());
+    lv_obj_set_size(canvas1, 240, 240);
+    lv_obj_center(canvas1);
     while(1)
     {
+        // ESP_LOGI(TAG,"SHOW_RUNNING");
+        // camera_fb_t *fb = esp_camera_fb_get();
+        // if (fb == NULL) {
+        //     ESP_LOGE("DISPLAY", "Camera capture failed");
+        //     vTaskDelay(pdMS_TO_TICKS(20));
+        //     continue;
+        // }
+        // lvgl_port_lock(0);
+        // lv_canvas_set_buffer(canvas1, fb->buf, fb->width, fb->height, LV_COLOR_FORMAT_RGB565);
+        
+        // lvgl_port_unlock(); 
         //bsp_ov3660_camera_capture();
         //bsp_lcd_full_color(0Xe6fa);
         //ESP_LOGI(TAG,"LCD_SHOW_RUNNING");
         vTaskDelay(pdMS_TO_TICKS(20));
+        //esp_camera_fb_return(fb);
     }
 }
 void print_memory_info() {
@@ -416,16 +432,16 @@ void app_main(void) {
     print_memory_info();
     //初始化lcd
     bsp_lcd_init();
-    bsp_lcd_full_color(0X0000);         //白色
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    bsp_lcd_full_color(0Xffff);         //黑色
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    bsp_lcd_full_color(~0XF800);  //brg取反
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    bsp_lcd_full_color(~0X001f);  //brg取反
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    bsp_lcd_full_color(~0X07e0);  //brg取反
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    bsp_lcd_full_color(0XFFFF);         //白色
+    vTaskDelay(pdMS_TO_TICKS(500));
+    bsp_lcd_full_color(0X0000);         //黑色
+    vTaskDelay(pdMS_TO_TICKS(500));
+    bsp_lcd_full_color(0XF800);  //brg取反
+    vTaskDelay(pdMS_TO_TICKS(500));
+    bsp_lcd_full_color(0X001f);  //brg取反
+    vTaskDelay(pdMS_TO_TICKS(500));
+    bsp_lcd_full_color(0X07e0);  //brg取反
+    vTaskDelay(pdMS_TO_TICKS(500));
         //初始化es8311麦克风和扬声器
     print_memory_info();
     //初始化摄像头
@@ -444,15 +460,15 @@ void app_main(void) {
     app_lvgl_init();
     print_memory_info();
     lvgl_port_lock(0);
-    // lv_obj_t * button = lv_button_create(lv_screen_active());
-    // lv_obj_center(button);
-    // lv_obj_set_height(button,100);
-    // lv_obj_set_width(button,100);
-    // lv_obj_set_style_bg_color(button, lv_color_hex(0x1976D2), LV_STATE_DEFAULT); // 蓝色背景
-    // lv_obj_set_style_text_color(button, lv_color_hex(0xFFFFFF), LV_STATE_DEFAULT); // 白色文本
+    // // lv_obj_t * button = lv_button_create(lv_screen_active());
+    // // lv_obj_center(button);
+    // // lv_obj_set_height(button,100);
+    // // lv_obj_set_width(button,100);
+    // // lv_obj_set_style_bg_color(button, lv_color_hex(0x1976D2), LV_STATE_DEFAULT); // 蓝色背景
+    // // lv_obj_set_style_text_color(button, lv_color_hex(0xFFFFFF), LV_STATE_DEFAULT); // 白色文本
 
-    // lv_obj_t * label = lv_label_create(button);
-    // lv_label_set_text(label, "Hello from LVGL!");
+    // // lv_obj_t * label = lv_label_create(button);
+    // // lv_label_set_text(label, "Hello from LVGL!");
     lv_demo_benchmark();
     lvgl_port_unlock(); 
     print_memory_info();
@@ -518,22 +534,24 @@ void app_main(void) {
     //bsp_8311_record_play_test();
     //bsp_8311_play_music();
 
-    
-
-
+    qwen_init();
+    app_sr_init();  //初始化语音模块
+    ESP_LOGE(TAG,"CREATE");
+    print_memory_info();
     xTaskCreatePinnedToCore(qwen_message_handle_task, "qwen_message_handle_task", 4096, NULL, 5, NULL, 1);
     xTaskCreatePinnedToCore(play_task, "play_task", 4*1024, NULL, 5, NULL, 0);
     if(xTaskCreatePinnedToCore(lcd_show_task, "lcd_show_task", 4096, NULL, 2, NULL, 0)!=pdPASS)
     {
         ESP_LOGE(TAG,"lcd_show_task_create_failed");
     }
-        //初始化千问模型访问接口
-    while(is_session_create==false) //等待session.created事件
-    {
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-    qwen_init();
-    app_sr_init();  //初始化语音模块
+    print_memory_info();
+    //     //初始化千问模型访问接口
+    // while(is_session_create==false) //等待session.created事件
+    // {
+    //     vTaskDelay(pdMS_TO_TICKS(100));
+    // }
+    
+    
     
     // app_sr_test();
     // char *read_buffer = heap_caps_malloc(640, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);      //读出的原始音频数据
@@ -561,9 +579,9 @@ void app_main(void) {
         // bsp_enc_dec_encode_base64((uint8_t *)read_buffer,640,read_buffer_encode,857,&encode_len);  //原始PCM数据编码成base64
         // ESP_LOGE(TAG,"encode_len:%d",encode_len);
         //                 qwen_send_audio(read_buffer_encode,encode_len);
-        UBaseType_t high_water_mark_words = uxTaskGetStackHighWaterMark(NULL);
-        ESP_LOGE(TAG,"main_words:%d",high_water_mark_words);
-        print_memory_info();
+        // UBaseType_t high_water_mark_words = uxTaskGetStackHighWaterMark(NULL);
+        // ESP_LOGE(TAG,"main_words:%d",high_water_mark_words);
+         print_memory_info();
         vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }
