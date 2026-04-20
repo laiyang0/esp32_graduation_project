@@ -9,11 +9,13 @@ idf_component_register(
         "./bsp/bsp_websocket.c"
         "./bsp/bsp_ring_buffer.c"
         "./ui/ui_init.c"
+        "./ui/fonts/ui_test_24_data.c"
         "app_sr.c"
         "qwen.c"
     INCLUDE_DIRS "."
         "./bsp"
         "./ui"
+        "./ui/fonts"
     REQUIRES esp_driver_i2s
             esp_driver_i2c
             # espressif__esp_codec_dev

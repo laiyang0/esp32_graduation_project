@@ -237,7 +237,7 @@ static void audio_qianwen_task(void *pvParam)
         // UBaseType_t high_water_mark_words = uxTaskGetStackHighWaterMark(NULL);
         // ESP_LOGE(TAG,"audio_qianwen:%d",high_water_mark_words);
 
-        vTaskDelay(pdMS_TO_TICKS(18));
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
 esp_err_t app_sr_init(void)
@@ -261,7 +261,7 @@ esp_err_t app_sr_init(void)
     }
 
     multinet = esp_mn_handle_from_name(mn_name);
-    model_data = multinet->create(mn_name, 6000);
+    model_data = multinet->create(mn_name, 6000);   //唤醒词模型唤醒后的命令词模型检测超时时间
     ESP_LOGI(TAG, "load multinet:%s", mn_name);
 
     esp_mn_commands_clear();
@@ -292,7 +292,7 @@ esp_err_t app_sr_init(void)
     ret_val = xTaskCreatePinnedToCore(audio_detect_task, "audio_detect_task", 5 * 1024, afe_data, 11, NULL,1);
     ESP_RETURN_ON_FALSE(pdPASS == ret_val, ESP_FAIL, TAG,  "Failed create audio detect task");
 
-    ret_val = xTaskCreatePinnedToCore(audio_qianwen_task, "audio_qianwen_task", 3 * 1024, NULL,15, NULL, 0);   //提高该任务优先级
+    ret_val = xTaskCreatePinnedToCore(audio_qianwen_task, "audio_qianwen_task", 3 * 1024, NULL,20, NULL, 0);   //提高该任务优先级
     ESP_RETURN_ON_FALSE(pdPASS == ret_val, ESP_FAIL, TAG,  "Failed create audio handler task");
     return ESP_OK;
 }

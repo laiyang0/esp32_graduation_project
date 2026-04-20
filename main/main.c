@@ -393,10 +393,14 @@ void play_task(void *arg)
 void lcd_show_task(void *arg)
 {
     ESP_LOGI(TAG,"LCD_SHOW_TASK start");
-    lv_obj_t *canvas1=NULL;
-    canvas1 = lv_canvas_create(lv_scr_act());
-    lv_obj_set_size(canvas1, 240, 240);
-    lv_obj_center(canvas1);
+    // lv_obj_t *canvas1=NULL;
+    // canvas1 = lv_canvas_create(lv_scr_act());
+    // lv_obj_set_size(canvas1, 240, 240);
+    // lv_obj_center(canvas1);
+
+    // lv_obj_t * main_screen = mainscreen_create();   // 创建主屏幕对象
+    // lv_obj_t * about_screen=screen_about_create();
+    //lv_scr_load(main_screen);                       // 加载并显示主屏幕
     while(1)
     {
         // ESP_LOGI(TAG,"SHOW_RUNNING");
@@ -410,10 +414,19 @@ void lcd_show_task(void *arg)
         // lv_canvas_set_buffer(canvas1, fb->buf, fb->width, fb->height, LV_COLOR_FORMAT_RGB565);
         
         // lvgl_port_unlock(); 
-        //bsp_ov3660_camera_capture();
+        bsp_ov3660_camera_capture();
+        vTaskDelay(pdMS_TO_TICKS(20));
         //bsp_lcd_full_color(0Xe6fa);
         //ESP_LOGI(TAG,"LCD_SHOW_RUNNING");
-        vTaskDelay(pdMS_TO_TICKS(20));
+        
+        // lvgl_port_lock(0);
+        // lv_scr_load(main_screen); 
+        // lvgl_port_unlock();        
+        // vTaskDelay(pdMS_TO_TICKS(1000));
+        // lvgl_port_lock(0);
+        // lv_scr_load(about_screen);    
+        // lvgl_port_unlock(); 
+        // vTaskDelay(pdMS_TO_TICKS(1000));
         //esp_camera_fb_return(fb);
     }
 }
@@ -432,16 +445,17 @@ void app_main(void) {
     print_memory_info();
     //初始化lcd
     bsp_lcd_init();
-    bsp_lcd_full_color(0XFFFF);         //白色
-    vTaskDelay(pdMS_TO_TICKS(500));
-    bsp_lcd_full_color(0X0000);         //黑色
-    vTaskDelay(pdMS_TO_TICKS(500));
-    bsp_lcd_full_color(0XF800);  //brg取反
-    vTaskDelay(pdMS_TO_TICKS(500));
-    bsp_lcd_full_color(0X001f);  //brg取反
-    vTaskDelay(pdMS_TO_TICKS(500));
-    bsp_lcd_full_color(0X07e0);  //brg取反
-    vTaskDelay(pdMS_TO_TICKS(500));
+    // bsp_lcd_full_color(0XFFFF);         //白色
+    // vTaskDelay(pdMS_TO_TICKS(500));
+    // bsp_lcd_full_color(0X0000);         //黑色
+    // vTaskDelay(pdMS_TO_TICKS(500));
+    bsp_lcd_full_color(0XF800);  //rgb->brg
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    bsp_lcd_full_color(0X07e0);  
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    bsp_lcd_full_color(0X001f);  //
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
         //初始化es8311麦克风和扬声器
     print_memory_info();
     //初始化摄像头
@@ -457,20 +471,24 @@ void app_main(void) {
     }
         ESP_LOGE(TAG,"RUNNING IN LVGL");
     print_memory_info();
-    app_lvgl_init();
-    print_memory_info();
-    lvgl_port_lock(0);
-    // // lv_obj_t * button = lv_button_create(lv_screen_active());
-    // // lv_obj_center(button);
-    // // lv_obj_set_height(button,100);
-    // // lv_obj_set_width(button,100);
-    // // lv_obj_set_style_bg_color(button, lv_color_hex(0x1976D2), LV_STATE_DEFAULT); // 蓝色背景
-    // // lv_obj_set_style_text_color(button, lv_color_hex(0xFFFFFF), LV_STATE_DEFAULT); // 白色文本
+    // app_lvgl_init();
+    // print_memory_info();
+    
+    // lvgl_port_lock(0);
+    // // // lv_obj_t * button = lv_button_create(lv_screen_active());
+    // // // lv_obj_center(button);
+    // // // lv_obj_set_height(button,100);
+    // // // lv_obj_set_width(button,100);
+    // // // lv_obj_set_style_bg_color(button, lv_color_hex(0x1976D2), LV_STATE_DEFAULT); // 蓝色背景
+    // // // lv_obj_set_style_text_color(button, lv_color_hex(0xFFFFFF), LV_STATE_DEFAULT); // 白色文本
 
-    // // lv_obj_t * label = lv_label_create(button);
-    // // lv_label_set_text(label, "Hello from LVGL!");
-    lv_demo_benchmark();
-    lvgl_port_unlock(); 
+    // // // lv_obj_t * label = lv_label_create(button);
+    // // // lv_label_set_text(label, "Hello from LVGL!");
+    // //lv_demo_benchmark();
+    // // lv_obj_t * main_screen = mainscreen_create();   // 创建主屏幕对象
+    // // lv_obj_t * about_screem=screen_about_create();
+    // // lv_scr_load(main_screen);                       // 加载并显示主屏幕
+    // lvgl_port_unlock(); 
     print_memory_info();
     //初始化wifi,连接wifi网络
     ESP_ERROR_CHECK(bsp_wifi_init());
