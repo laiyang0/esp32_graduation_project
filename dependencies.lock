@@ -141,6 +141,18 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 9.5.0
+  txp666/otto-emoji-gif-component:
+    component_hash: 
+      8da812ae44707af319a20e164e8b544199fe401436167c206e684594e0a38c5d
+    dependencies:
+    - name: lvgl/lvgl
+      registry_url: https://components.espressif.com
+      require: private
+      version: '>=9.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.1.1
 direct_dependencies:
 - espressif/esp-sr
 - espressif/esp32-camera
@@ -150,6 +162,7 @@ direct_dependencies:
 - espressif/esp_websocket_client
 - idf
 - lvgl/lvgl
-manifest_hash: eefe87823e59794a5c412f0177adad0870e5f4245c2fff46d055c5cb23f3b2ef
+- txp666/otto-emoji-gif-component
+manifest_hash: 7f5da58cab3ba86ce018b8ba0e6b9475ef8dbabf34b2ec1be301ee728c2d8311
 target: esp32s3
 version: 2.0.0

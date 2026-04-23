@@ -25,3 +25,4 @@ dependencies:
 
   espressif/esp_lvgl_port: ^2.7.2
   lvgl/lvgl: ^9.5.0
+  txp666/otto-emoji-gif-component: ^1.1.1

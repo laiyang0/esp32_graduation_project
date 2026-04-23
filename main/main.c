@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "esp_sntp.h"
+#include "esp_spiffs.h"
 // #include "driver/i2s.h"
 #include "driver/i2s_std.h"
 #include "driver/i2c_master.h"
@@ -16,9 +17,8 @@
 #include "freertos/queue.h"
 #include <stdint.h>
 
-#include "esp_audio_enc.h"
-#include "esp_codec_dev_defaults.h"
-#include "esp_spiffs.h"
+// #include "esp_audio_enc.h"
+// #include "esp_codec_dev_defaults.h"
 
 #include "bsp_es8311.h"
 #include "bsp_lcd.h"
@@ -39,6 +39,7 @@
 #include "esp_camera.h"
 #include <dirent.h>
 #include <sys/stat.h>   // 如果需要 stat 等函数
+#include "mmap.h"
 // WiFi配置
 #define WIFI_SSID      "vivoly"  // WiFi SSID
 #define WIFI_PASSWORD  "250250250"    // WiFi 密码
@@ -401,21 +402,35 @@ void lcd_show_task(void *arg)
     // lv_obj_t * main_screen = mainscreen_create();   // 创建主屏幕对象
     // lv_obj_t * about_screen=screen_about_create();
     //lv_scr_load(main_screen);                       // 加载并显示主屏幕
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+
     while(1)
     {
         // ESP_LOGI(TAG,"SHOW_RUNNING");
-        // camera_fb_t *fb = esp_camera_fb_get();
-        // if (fb == NULL) {
-        //     ESP_LOGE("DISPLAY", "Camera capture failed");
-        //     vTaskDelay(pdMS_TO_TICKS(20));
-        //     continue;
-        // }
-        // lvgl_port_lock(0);
+        camera_fb_t *fb = esp_camera_fb_get();
+        if (fb == NULL) {
+            ESP_LOGE("DISPLAY", "Camera capture failed");
+            vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
+        }
+        if(camera_canvas_buff!=NULL)
+        {
+
+            memcpy(camera_canvas_buff, fb->buf,LCD_DISP_WIDTH * LCD_DISP_HEIGHT * 2);
+            
+            //memcpy(camera_canvas_buff,test_buff ,100*100*2);
+            lvgl_port_lock(0);
+            lv_obj_invalidate(camera_canvas);
+            lvgl_port_unlock();
+        }
+        esp_camera_fb_return(fb);
+        
         // lv_canvas_set_buffer(canvas1, fb->buf, fb->width, fb->height, LV_COLOR_FORMAT_RGB565);
         
         // lvgl_port_unlock(); 
-        bsp_ov3660_camera_capture();
-        vTaskDelay(pdMS_TO_TICKS(20));
+        // bsp_ov3660_camera_capture();
+        // vTaskDelay(pdMS_TO_TICKS(20));
         //bsp_lcd_full_color(0Xe6fa);
         //ESP_LOGI(TAG,"LCD_SHOW_RUNNING");
         
@@ -428,6 +443,7 @@ void lcd_show_task(void *arg)
         // lvgl_port_unlock(); 
         // vTaskDelay(pdMS_TO_TICKS(1000));
         //esp_camera_fb_return(fb);
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
 void print_memory_info() {
@@ -438,19 +454,25 @@ void print_memory_info() {
     ESP_LOGE(TAG,"Free DMA memory: %d bytes", heap_caps_get_free_size(MALLOC_CAP_DMA));
     // heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
 }
-void app_main(void) {
+#include "mmap_generate_gifs.h"
+void app_main(void) 
+{
     // 初始化NVS
     ESP_ERROR_CHECK(nvs_flash_init());
 
     print_memory_info();
+    //初始化gifs分区的内存映射
+    mmap_gifs_init();
+
+
     //初始化lcd
     bsp_lcd_init();
     // bsp_lcd_full_color(0XFFFF);         //白色
     // vTaskDelay(pdMS_TO_TICKS(500));
-    // bsp_lcd_full_color(0X0000);         //黑色
-    // vTaskDelay(pdMS_TO_TICKS(500));
-    bsp_lcd_full_color(0XF800);  //rgb->brg
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    bsp_lcd_full_color(0X0000);         //黑色
+    vTaskDelay(pdMS_TO_TICKS(500));
+    bsp_lcd_full_color(0XF800);  //
+    vTaskDelay(pdMS_TO_TICKS(1000));//brg
     bsp_lcd_full_color(0X07e0);  
     vTaskDelay(pdMS_TO_TICKS(1000));
     bsp_lcd_full_color(0X001f);  //
@@ -467,28 +489,24 @@ void app_main(void) {
         ESP_LOGI("ESP8311","BSP_8311_INIT SUCCESS");
     }
     else{
-        ESP_LOGE("ESP8311","BSP_8311_INIT FAIprint_memory_info();D");
+        ESP_LOGE("ESP8311","BSP_8311_INIT FAID");
     }
-        ESP_LOGE(TAG,"RUNNING IN LVGL");
+    ESP_LOGE(TAG,"RUNNING IN LVGL");
     print_memory_info();
-    // app_lvgl_init();
+    app_lvgl_init();
     // print_memory_info();
-    
-    // lvgl_port_lock(0);
-    // // // lv_obj_t * button = lv_button_create(lv_screen_active());
-    // // // lv_obj_center(button);
-    // // // lv_obj_set_height(button,100);
-    // // // lv_obj_set_width(button,100);
-    // // // lv_obj_set_style_bg_color(button, lv_color_hex(0x1976D2), LV_STATE_DEFAULT); // 蓝色背景
-    // // // lv_obj_set_style_text_color(button, lv_color_hex(0xFFFFFF), LV_STATE_DEFAULT); // 白色文本
+        // 在 LVGL 中显示 GIF
+    mainscreen=mainscreen_create();    //创建lvgl主页面
+    camerascreen=camerascreen_create();  //创建camera页面
+    lvgl_port_lock(0);
 
-    // // // lv_obj_t * label = lv_label_create(button);
-    // // // lv_label_set_text(label, "Hello from LVGL!");
-    // //lv_demo_benchmark();
-    // // lv_obj_t * main_screen = mainscreen_create();   // 创建主屏幕对象
-    // // lv_obj_t * about_screem=screen_about_create();
-    // // lv_scr_load(main_screen);                       // 加载并显示主屏幕
-    // lvgl_port_unlock(); 
+    //lv_demo_benchmark();  //demo
+    //lv_scr_load(mainscreen);
+    lv_scr_load(camerascreen);
+    // lv_obj_t * label = lv_label_create(lv_scr_act());
+    // lv_label_set_text(label, "Hello from LVGL!");
+    // lv_obj_center(label);
+    lvgl_port_unlock(); 
     print_memory_info();
     //初始化wifi,连接wifi网络
     ESP_ERROR_CHECK(bsp_wifi_init());

@@ -1,8 +1,16 @@
 #include "ui_init.h"
-#include "esp_lvgl_port.h"
+
 #include "lv_demos.h"
 #include "bsp_lcd.h"
 // #include "lvgl.h"
+
+      
+lv_obj_t *mainscreen=NULL;     //主页面对象指针
+lv_obj_t *camerascreen=NULL;   //摄像页面对象指针
+
+uint8_t *camera_canvas_buff=NULL;     //摄像头画布缓存
+lv_obj_t * camera_canvas=NULL;        //摄像头画布对象指针
+
 
 static const char *TAG="ui_init";
 
@@ -16,7 +24,7 @@ esp_err_t app_lvgl_init(void)
         .task_stack = 8196,         /* LVGL task stack size */
         .task_affinity = -1,        /* LVGL task pinned to core (-1 is no affinity) */
         .task_max_sleep_ms = 500,   /* Maximum sleep in LVGL task */
-        .timer_period_ms = 10        /* LVGL timer tick period in ms */
+        .timer_period_ms = 10,        /* LVGL timer tick period in ms */
     };
     ESP_RETURN_ON_ERROR(lvgl_port_init(&lvgl_cfg), TAG, "LVGL port initialization failed");
 
@@ -80,110 +88,5 @@ esp_err_t app_lvgl_init(void)
     // lvgl_touch_indev = lvgl_port_add_touch(&touch_cfg);
 
     return ESP_OK;
-}
-lv_obj_t * mainscreen = NULL;
-lv_obj_t * aboutscreen = NULL;
-// lv_obj_t * screen_about_create(void)
-// {
-//     return NULL;
-// }
-lv_obj_t * mainscreen_create(void)
-{
-    LV_TRACE_OBJ_CREATE("begin");
-
-
-    static bool style_inited = false;
-
-    if (!style_inited) {
-
-        style_inited = true;
-    }
-
-    if (mainscreen == NULL) mainscreen = lv_obj_create(NULL);
-    lv_obj_t * lv_obj_0 = mainscreen;
-    lv_obj_set_name_static(lv_obj_0, "mainscreen_#");
-
-    lv_obj_t * lv_label_0 = lv_label_create(lv_obj_0);
-    lv_label_set_text(lv_label_0, "Main screen  (permanent)");
-    lv_obj_set_align(lv_label_0, LV_ALIGN_TOP_MID);
-    lv_obj_set_y(lv_label_0, 10);
-    lv_obj_set_style_text_color(lv_label_0, lv_color_hex(0x0ea9d0), 0);
-    
-    lv_obj_t * lv_slider_0 = lv_slider_create(lv_obj_0);
-    lv_obj_set_align(lv_slider_0, LV_ALIGN_CENTER);
-    lv_obj_set_style_bg_color(lv_slider_0, lv_color_hex(0x22228b), 0);
-    
-    lv_obj_t * lv_label_1 = lv_label_create(lv_obj_0);
-    lv_label_set_text(lv_label_1, "I'm on a permanent screen,\n 你好");
-    lv_obj_set_y(lv_label_1, -30);
-    lv_obj_set_align(lv_label_1, LV_ALIGN_CENTER);
-    lv_obj_set_style_text_align(lv_label_1, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(lv_label_1, lv_color_hex(0x2f13c3), 0);
-    lv_obj_set_style_bg_color(lv_label_1, lv_color_hex(0xb9156b), 0);
-    lv_obj_set_style_border_color(lv_label_1, lv_color_hex(0xd02929), 0);
-    lv_obj_set_style_border_width(lv_label_1, 1, 0);
-    lv_obj_set_style_text_font(lv_label_1, &ui_test_24_data, 0);
-    
-    lv_obj_t * lv_button_0 = lv_button_create(lv_obj_0);
-    lv_obj_set_align(lv_button_0, LV_ALIGN_BOTTOM_MID);
-    lv_obj_set_y(lv_button_0, -10);
-    lv_obj_set_style_bg_color(lv_button_0, lv_color_hex(0xc400ff), 0);
-    lv_obj_set_style_border_color(lv_button_0, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_border_width(lv_button_0, 1, 0);
-    lv_obj_t * lv_label_2 = lv_label_create(lv_button_0);
-    lv_label_set_text(lv_label_2, "About");
-    lv_obj_set_style_text_color(lv_label_2, lv_color_hex(0x283d95), 0);
-    
-    //lv_obj_add_screen_create_event(lv_button_0, LV_EVENT_CLICKED, screen_about_create, LV_SCREEN_LOAD_ANIM_MOVE_TOP, 500, 0);
-
-    LV_TRACE_OBJ_CREATE("finished");
-
-    return lv_obj_0;
-}
-lv_obj_t * screen_about_create(void)
-{
-    LV_TRACE_OBJ_CREATE("begin");
-
-
-    static bool style_inited = false;
-
-    if (!style_inited) {
-
-        style_inited = true;
-    }
-
-    lv_obj_t * lv_obj_0 = lv_obj_create(NULL);
-    lv_obj_set_name_static(lv_obj_0, "screen_about_#");
-    lv_obj_set_style_bg_color(lv_obj_0, lv_color_hex(0x041d3a), 0);
-    lv_obj_set_style_text_color(lv_obj_0, lv_color_hex3(0xfff), 0);
-
-    lv_obj_t * lv_label_0 = lv_label_create(lv_obj_0);
-    lv_label_set_text(lv_label_0, "About screen (dynamically created)");
-    lv_obj_set_align(lv_label_0, LV_ALIGN_TOP_MID);
-    lv_obj_set_y(lv_label_0, 10);
-    lv_obj_set_width(lv_label_0, lv_pct(100));
-    
-    lv_obj_t * lv_slider_0 = lv_slider_create(lv_obj_0);
-    lv_obj_set_align(lv_slider_0, LV_ALIGN_CENTER);
-    lv_obj_set_width(lv_slider_0, 240);
-    
-    lv_obj_t * lv_label_1 = lv_label_create(lv_obj_0);
-    lv_label_set_text(lv_label_1, "I'm NOT on a permanent screed,\n so my state will be lost");
-    lv_obj_set_y(lv_label_1, -30);
-    lv_obj_set_align(lv_label_1, LV_ALIGN_CENTER);
-    lv_obj_set_style_text_align(lv_label_1, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(lv_label_1, 240);
-    
-    lv_obj_t * lv_button_0 = lv_button_create(lv_obj_0);
-    lv_obj_set_align(lv_button_0, LV_ALIGN_BOTTOM_MID);
-    lv_obj_set_y(lv_button_0, -10);
-    lv_obj_t * lv_label_2 = lv_label_create(lv_button_0);
-    lv_label_set_text(lv_label_2, "Back");
-    
-    //lv_obj_add_screen_load_event(lv_button_0, LV_EVENT_CLICKED, mainscreen, LV_SCREEN_LOAD_ANIM_MOVE_BOTTOM, 500, 0);
-
-    LV_TRACE_OBJ_CREATE("finished");
-
-    return lv_obj_0;
 }
 

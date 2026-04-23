@@ -6,4 +6,5 @@ factory,  app,  factory, 0x10000,  4M,
 
 # 自定义分区
 model,      data,   spiffs,      ,    5168K,
-storage,      data,   spiffs,      ,  6M,
+storage,      data,   spiffs,      ,  5M,
+gifs,     data,   spiffs,         ,   300K,       
