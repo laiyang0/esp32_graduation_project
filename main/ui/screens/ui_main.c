@@ -9,10 +9,7 @@ static const char *TAG="main_screen";
 lv_obj_t * mainscreen_create(void)
 {
     //LV_TRACE_OBJ_CREATE("begin");
-    if(lvgl_port_lock(0)==false)
-    {
-        ESP_LOGE(TAG,"lvgl_port_lock failed");
-    }
+    lvgl_port_lock(portMAX_DELAY);
     lv_obj_t *main_screen =lv_obj_create(NULL);  //创建新的屏幕对象
     uint8_t *gifs_mem=NULL;
     size_t gifs_size=0;

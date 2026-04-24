@@ -404,7 +404,6 @@ void lcd_show_task(void *arg)
     //lv_scr_load(main_screen);                       // 加载并显示主屏幕
     vTaskDelay(pdMS_TO_TICKS(2000));
 
-
     while(1)
     {
         // ESP_LOGI(TAG,"SHOW_RUNNING");
@@ -417,12 +416,17 @@ void lcd_show_task(void *arg)
         if(camera_canvas_buff!=NULL)
         {
 
-            memcpy(camera_canvas_buff, fb->buf,LCD_DISP_WIDTH * LCD_DISP_HEIGHT * 2);
             
             //memcpy(camera_canvas_buff,test_buff ,100*100*2);
-            lvgl_port_lock(0);
-            lv_obj_invalidate(camera_canvas);
-            lvgl_port_unlock();
+            if(lvgl_port_lock(0)==true)
+            {
+                memcpy(camera_canvas_buff, fb->buf,LCD_DISP_WIDTH * LCD_DISP_HEIGHT * 2);
+                lv_obj_invalidate(camera_canvas);
+                lvgl_port_unlock();
+            }
+            else{
+                ESP_LOGE(TAG,"lcd_show_task_lvgl_port_lock_failed");
+            }
         }
         esp_camera_fb_return(fb);
         
@@ -496,17 +500,48 @@ void app_main(void)
     app_lvgl_init();
     // print_memory_info();
         // 在 LVGL 中显示 GIF
-    mainscreen=mainscreen_create();    //创建lvgl主页面
-    camerascreen=camerascreen_create();  //创建camera页面
-    lvgl_port_lock(0);
+    mainscreen=mainscreen_create();         //创建lvgl主页面
+    camerascreen=camerascreen_create();     //创建camera页面
+    chatscreen=chatcreen_create();          //创建chat页面
+    if(lvgl_port_lock(0))
+    {
+        //lv_demo_benchmark();  //demo
+        //lv_scr_load(mainscreen);
+        //lv_scr_load(camerascreen);
+        lv_scr_load(chatscreen);
+        // lv_obj_t * label = lv_label_create(lv_scr_act());
+        // lv_label_set_text(label, "Hello from LVGL!");
+        // lv_obj_center(label);
+        
+        lvgl_port_unlock(); 
+    }
+    else{
+        ESP_LOGE(TAG,"lvgl_port_lock_failed");
+    }
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    chatcreen_create_chat(0,"laiyang12nineein你好");
+    vTaskDelay(pdMS_TO_TICKS(500));
+    chatcreen_chat_add_text(0,"你好,laiyang12nineein");
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    chatcreen_create_chat(1,"djonfikbnikebikcwf");
+    vTaskDelay(pdMS_TO_TICKS(500));
+    chatcreen_chat_add_text(1,"laiyang12nineein你好");
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    chatcreen_create_chat(2,"djonfikbnikebikcwf");
+    vTaskDelay(pdMS_TO_TICKS(500));
+    chatcreen_chat_add_text(2,"laiyang12n你好ineein");
+    lvgl_port_lock(portMAX_DELAY);
 
-    //lv_demo_benchmark();  //demo
-    //lv_scr_load(mainscreen);
-    lv_scr_load(camerascreen);
-    // lv_obj_t * label = lv_label_create(lv_scr_act());
-    // lv_label_set_text(label, "Hello from LVGL!");
-    // lv_obj_center(label);
-    lvgl_port_unlock(); 
+    lvgl_port_unlock();
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    chatcreen_create_chat(3,"djonfikbnikebikcwf");
+
+    // lvgl_port_lock(portMAX_DELAY);
+    // lv_obj_clean(chat_button[1]);
+    // lvgl_port_unlock();
+
+
+
     print_memory_info();
     //初始化wifi,连接wifi网络
     ESP_ERROR_CHECK(bsp_wifi_init());

@@ -12,6 +12,7 @@ idf_component_register(
         "./ui/fonts/ui_test_24_data.c"
         "./ui/screens/ui_main.c"
         "./ui/screens/ui_camera.c"
+        "./ui/screens/ui_chat.c"
         "mmap.c"
         "app_sr.c"
         "qwen.c"

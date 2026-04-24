@@ -59,8 +59,8 @@ esp_err_t bsp_ov3660_init()
     if (s->id.PID == OV3660_PID) {
         s->set_vflip(s, 0);             // 垂直翻转（根据您的安装方向可能需要调整）    0/1
         s->set_hmirror(s, 0); //        //水平翻转                                   0/1
-        s->set_brightness(s, 0);      // 略微增加亮度                               -2--2
-        s->set_saturation(s, 0);      // 降低饱和度（根据效果调整）                   -2--2
+        s->set_brightness(s, 2);      // 略微增加亮度                               -2--2
+        s->set_saturation(s, 2);      // 降低饱和度（根据效果调整）                   -2--2
         ESP_LOGI(TAG, "OV3660 sensor specific settings applied.");
     }
 
