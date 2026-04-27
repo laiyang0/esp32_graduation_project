@@ -46,13 +46,14 @@
 
 
 
-// // 服务器配置
-// #define SERVER_IP   "192.168.106.250"   // 服务器 IP
-// #define SERVER_PORT 12345           // 服务器端口
+uint8_t systerm_conversation_index=0;   //对话索引，每完成一次对话，索引加1
+// 系统通知事件组
+EventGroupHandle_t system_event_group=NULL;
+const int system_event_main = BIT0;     //切换到主页面
+const int system_event_camera= BIT1;    //切换到摄像头页面
+const int system_event_chat = BIT2;     //切换到对话页面
+const int system_event_opencamera = BIT3;     //打开摄像头设备
 
-// WiFi事件组
-static EventGroupHandle_t s_event_group;
-const int WIFI_CONNECTED_BIT = BIT0;
 static const char *TAG = "main_task";
 
 // 定义音频数据队列
@@ -68,6 +69,7 @@ static QueueHandle_t websocket_queue;
 // static int16_t discard_buffer_global[QUEUE_ITEM_SIZE];
 
 bsp_ring_buffer_t *audio_ring_buffer=NULL;   //音频环形缓冲区
+bsp_ring_buffer_t *text_ring_buffer=NULL;   //文本环形缓冲区
 
 static size_t ring_buffer_write_count=0; //计算写入音频环形缓冲区的次数
 
@@ -142,9 +144,15 @@ void bsp_user_event_callback(const struct EventData* event)
                 ESP_LOGE(TAG, "malloc error");
             }
             memcpy(queue_event.data,event->data,event->data_len);
-            if(xQueueSend(websocket_queue, &queue_event, 0)!= pdPASS)
+            BaseType_t ret=xQueueSend(websocket_queue, &queue_event, 0);
+            if(ret!= pdPASS)
             {
-                ESP_LOGE(TAG, "websocket_queue_send_error");
+                //ESP_LOGI(TAG, "WebSocket callback running in task: %s", pcTaskGetName(NULL)(NULL));
+                ESP_LOGE(TAG, "websocket_queue_send_error:%d",ret);
+                if(ret==errQUEUE_FULL)  //队列满错误
+                {
+                    ESP_LOGE(TAG, "websocket_queue_full");
+                }
                 free(queue_event.data);
             }
             // websocket_queue
@@ -190,12 +198,14 @@ void qwen_message_handle_task(void *arg) {
     ESP_LOGI(TAG, "qwen_message_handle_task start");
     qwen_server_event_t event_type=-1;
     struct EventData queue_data;
+    //bsp_ring_buffer_init();
     while(1)
     {
-        if (xQueueReceive(websocket_queue,&queue_data, portMAX_DELAY) == pdPASS) //接收到服务器的json数据
+        if (xQueueReceive(websocket_queue,&queue_data,0) == pdPASS) //接收到服务器的json数据
         {
             //ESP_LOGE(TAG,"qwen_message_handle_task:data_len:%d,pay_len:%d,pay_offset:%d",queue_data.data_len,queue_data.payload_len,queue_data.payload_offset);
             // ESP_LOGI(TAG,"receive:%s",queue_data.data);
+            //ESP_LOGE(TAG,"receive:%s",queue_data.data);
             if(queue_data.data_len==queue_data.payload_len) //这里说明数据没有进行分片，即为完整数据
             {
                 //ESP_LOGI(TAG,"receive:%s",queue_data.data);
@@ -250,6 +260,7 @@ void qwen_message_handle_task(void *arg) {
                             cJSON *transcript = cJSON_GetObjectItem(root, "transcript");
                             if(cJSON_IsString(transcript))
                             {
+                                chatcreen_create_chat(2*systerm_conversation_index,transcript->valuestring);
                                 ESP_LOGE(TAG, "\n\ninput:%s\n\n",transcript->valuestring);
                             }
                             ESP_LOGI(TAG, "Input transcription completed");
@@ -259,10 +270,12 @@ void qwen_message_handle_task(void *arg) {
                             break;
                         case response_created:
                             ESP_LOGI(TAG, "Response created");  //对话建立
-                            ring_buffer_write_count=0;          //清空buffer
+                            ring_buffer_write_count=0;          //清空音频数据buffer
+                            
                             break;
                         case response_done:
-                            ESP_LOGI(TAG, "Response done");
+                            ESP_LOGI(TAG, "Response done");//一次对话过程完成
+                            
                             break;
                         case response_text_delta:
                             ESP_LOGI(TAG, "Text delta received");
@@ -280,10 +293,23 @@ void qwen_message_handle_task(void *arg) {
                             ESP_LOGI(TAG, "Audio generation done");
                             break;
                         case response_audio_transcript_delta:
-                            ESP_LOGI(TAG, "Audio transcript delta");
+                            ESP_LOGI(TAG, "Audio transcript delta");    //语音转写文字后的分片内容
+                            cJSON *delta = cJSON_GetObjectItem(root, "delta");
+                            if(cJSON_IsString(delta))
+                            {
+                                //chatcreen_chat_add_text(2*systerm_conversation_index+1,delta->valuestring);
+                                bsp_ring_buffer_write(text_ring_buffer,(uint8_t *)delta->valuestring,strlen(delta->valuestring));
+                                //ESP_LOGE(TAG, "%s",delta->valuestring);
+                            }
                             break;
                         case response_audio_transcript_done:
                             ESP_LOGI(TAG, "Audio transcript done");
+                            cJSON *answer_transcript = cJSON_GetObjectItem(root, "transcript");
+                            if(cJSON_IsString(answer_transcript))
+                            {
+                                //chatcreen_create_chat(2*systerm_conversation_index+1,answer_transcript->valuestring);
+                                ESP_LOGE(TAG, "%s",answer_transcript->valuestring);
+                            }
                             break;
                         case response_output_item_added:
                             ESP_LOGI(TAG, "Output item added");
@@ -291,7 +317,10 @@ void qwen_message_handle_task(void *arg) {
                         case response_output_item_done:
                             ESP_LOGI(TAG, "Output item done");
                             break;
-                        case response_content_part_added:
+                        case response_content_part_added:   //这里表示开始接收回复的音频的文字转写内容,在这里进行对话回复框的建立
+                            //systerm_conversation_index
+                            //chatcreen_create_chat(2*systerm_conversation_index+1,NULL); //创建消息回复对话框
+                            text_ring_buffer=bsp_ring_buffer_init(2*1024);              //创建2k的文本环形缓冲区
                             ESP_LOGI(TAG, "Content part added");
                             break;
                         case response_content_part_done:
@@ -325,7 +354,7 @@ void qwen_message_handle_task(void *arg) {
                     {
                         if(strcmp(qwen_server_event_str[14],type->valuestring)==0)  //判断是否为音频数据分片帧
                         {
-                            ESP_LOGE(TAG, "receive audio_frame");
+                            //ESP_LOGE(TAG, "receive audio_frame");
                             cJSON *audio_delta = cJSON_GetObjectItem(root, "delta");    
                             if(cJSON_IsString(audio_delta))
                             {
@@ -334,14 +363,14 @@ void qwen_message_handle_task(void *arg) {
                                size_t decode_len=0;
 
                                bsp_enc_dec_decode_base64(audio_delta->valuestring,strlen(audio_delta->valuestring),play_buffer_dec,20680,&decode_len);
-                               ESP_LOGE(TAG,"audio_len:%d",decode_len);   //解码后的数据长度
+                               //ESP_LOGE(TAG,"audio_len:%d",decode_len);   //解码后的数据长度
                                //bsp_8311_write(play_buffer_dec,decode_len);
                                size_t write_len=bsp_ring_buffer_write(audio_ring_buffer,play_buffer_dec,decode_len);
                                ring_buffer_write_count++;
 
                                if(write_len==decode_len)    //写入实际长度等于写入期望长度
                                {
-                                  ESP_LOGE(TAG,"ring_buffer_write_count:%d",ring_buffer_write_count);   //解码后的数据长度
+                                  ESP_LOGI(TAG,"ring_buffer_write_count:%d",ring_buffer_write_count);   //解码后的数据长度
                                }
                                else{
                                  ESP_LOGE(TAG,"ring_buffer write:%d",write_len);   //解码后的数据长度
@@ -362,15 +391,42 @@ void play_task(void *arg)
 {
     ESP_LOGI(TAG, "play_task start");
     uint8_t read_buffer[640];
+    uint8_t  text_time_count=0;//文本时间计数
     while(1)
     {
         //ESP_LOGE(TAG,"play_task");
         if(ring_buffer_write_count<=10) 
         {
+            if(ring_buffer_write_count==10) //第十次语音数据，第5s时
+            {
+                chatcreen_create_chat(2*systerm_conversation_index+1,NULL); //创建消息回复对话框
+            }
             vTaskDelay(pdMS_TO_TICKS(18)); 
+            
             continue;
         }
+        //读取音频转写文本数据写入屏幕
+        uint8_t text_data[7]={0,0,0,0,0,0,0};
+        text_time_count++;
+        if(text_time_count==22) //0.22s
+        {
+            text_time_count=0;
+            memset(text_data,0,7);
+            uint8_t read_text_len=bsp_ring_buffer_read(text_ring_buffer,text_data,6); //计算得出每0.22s，即220ms播放一个字
+            if(read_text_len==6||read_text_len==3)    //成功读取到一个/两个字
+            {
+                //ESP_LOGE(TAG,"text_data:%s",text_data);
+                chatcreen_chat_add_text(2*systerm_conversation_index+1,(char *)text_data); //向本次的对话回复框写入数据
+            }
+            else if(read_text_len==0)   //这里表示text_ring_buff的数据读完
+            {
+                bsp_ring_buffer_deinit(text_ring_buffer);   //释放该环形缓冲区
+                systerm_conversation_index++;   //对话索引加1
+            }
+        }
         
+
+        //读取音频数据写入
         size_t read_len=bsp_ring_buffer_read(audio_ring_buffer,read_buffer,640);
         if(read_len==0)
         {
@@ -402,33 +458,71 @@ void lcd_show_task(void *arg)
     // lv_obj_t * main_screen = mainscreen_create();   // 创建主屏幕对象
     // lv_obj_t * about_screen=screen_about_create();
     //lv_scr_load(main_screen);                       // 加载并显示主屏幕
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
+    //vTaskDelay(pdMS_TO_TICKS(2000));
+    
     while(1)
     {
-        // ESP_LOGI(TAG,"SHOW_RUNNING");
-        camera_fb_t *fb = esp_camera_fb_get();
-        if (fb == NULL) {
-            ESP_LOGE("DISPLAY", "Camera capture failed");
-            vTaskDelay(pdMS_TO_TICKS(20));
-            continue;
-        }
-        if(camera_canvas_buff!=NULL)
+        EventBits_t uxBits = xEventGroupWaitBits(system_event_group,      // 事件组句柄
+                                                 system_event_main |system_event_camera|system_event_chat|system_event_opencamera, // 等待的位
+                                                 pdFALSE,           // 退出时清除这些位
+                                                 pdFALSE,           // 等待所有位
+                                                 0);   // 非阻塞
+        if(uxBits&system_event_main)
         {
-
-            
-            //memcpy(camera_canvas_buff,test_buff ,100*100*2);
-            if(lvgl_port_lock(0)==true)
+            if(lvgl_port_lock(0))
             {
-                memcpy(camera_canvas_buff, fb->buf,LCD_DISP_WIDTH * LCD_DISP_HEIGHT * 2);
-                lv_obj_invalidate(camera_canvas);
-                lvgl_port_unlock();
+                lv_scr_load(mainscreen);
+                lvgl_port_unlock(); 
+                xEventGroupClearBits(system_event_group, system_event_main);
+                xEventGroupClearBits(system_event_group, system_event_opencamera);//关闭摄像头设备
             }
-            else{
-                ESP_LOGE(TAG,"lcd_show_task_lvgl_port_lock_failed");
-            }
+            ESP_LOGE(TAG,"MAIN_RUNNING");
         }
-        esp_camera_fb_return(fb);
+        if(uxBits&system_event_camera)
+        {
+            if(lvgl_port_lock(0))
+            {
+                lv_scr_load(camerascreen);
+                lvgl_port_unlock(); 
+                xEventGroupClearBits(system_event_group, system_event_camera);
+            }
+            ESP_LOGE(TAG,"CAMERA_RUNNING");
+        }
+        if(uxBits&system_event_chat)
+        {
+            if(lvgl_port_lock(0))
+            {
+                lv_scr_load(chatscreen);
+                lvgl_port_unlock(); 
+                xEventGroupClearBits(system_event_group, system_event_chat);
+                xEventGroupClearBits(system_event_group, system_event_opencamera);//关闭摄像头设备
+            }
+            ESP_LOGE(TAG,"CHAT_RUNNING");
+        }
+        if(uxBits&system_event_opencamera)  //打开摄像头
+        {
+            camera_fb_t *fb = esp_camera_fb_get();
+            if (fb == NULL) {
+                ESP_LOGE("DISPLAY", "Camera capture failed");
+                vTaskDelay(pdMS_TO_TICKS(20));
+                continue;
+            }
+            if(camera_canvas_buff!=NULL)
+            {  
+                //memcpy(camera_canvas_buff,test_buff ,100*100*2);
+                if(lvgl_port_lock(0)==true)
+                {
+                    memcpy(camera_canvas_buff, fb->buf,LCD_DISP_WIDTH * LCD_DISP_HEIGHT * 2);
+                    lv_obj_invalidate(camera_canvas);
+                    lvgl_port_unlock();
+                }
+                else{
+                    ESP_LOGE(TAG,"lcd_show_task_lvgl_port_lock_failed");
+                }
+            }
+            esp_camera_fb_return(fb);
+        }
+
         
         // lv_canvas_set_buffer(canvas1, fb->buf, fb->width, fb->height, LV_COLOR_FORMAT_RGB565);
         
@@ -464,7 +558,7 @@ void app_main(void)
     // 初始化NVS
     ESP_ERROR_CHECK(nvs_flash_init());
 
-    print_memory_info();
+    //print_memory_info();
     //初始化gifs分区的内存映射
     mmap_gifs_init();
 
@@ -473,14 +567,14 @@ void app_main(void)
     bsp_lcd_init();
     // bsp_lcd_full_color(0XFFFF);         //白色
     // vTaskDelay(pdMS_TO_TICKS(500));
-    bsp_lcd_full_color(0X0000);         //黑色
-    vTaskDelay(pdMS_TO_TICKS(500));
-    bsp_lcd_full_color(0XF800);  //
-    vTaskDelay(pdMS_TO_TICKS(1000));//brg
-    bsp_lcd_full_color(0X07e0);  
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    bsp_lcd_full_color(0X001f);  //
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    // bsp_lcd_full_color(0X0000);         //黑色
+    // vTaskDelay(pdMS_TO_TICKS(500));
+    // bsp_lcd_full_color(0XF800);  //
+    // vTaskDelay(pdMS_TO_TICKS(1000));//brg
+    // bsp_lcd_full_color(0X07e0);  
+    // vTaskDelay(pdMS_TO_TICKS(1000));
+    // bsp_lcd_full_color(0X001f);  //
+    // vTaskDelay(pdMS_TO_TICKS(1000));
 
         //初始化es8311麦克风和扬声器
     print_memory_info();
@@ -503,38 +597,7 @@ void app_main(void)
     mainscreen=mainscreen_create();         //创建lvgl主页面
     camerascreen=camerascreen_create();     //创建camera页面
     chatscreen=chatcreen_create();          //创建chat页面
-    if(lvgl_port_lock(0))
-    {
-        //lv_demo_benchmark();  //demo
-        //lv_scr_load(mainscreen);
-        //lv_scr_load(camerascreen);
-        lv_scr_load(chatscreen);
-        // lv_obj_t * label = lv_label_create(lv_scr_act());
-        // lv_label_set_text(label, "Hello from LVGL!");
-        // lv_obj_center(label);
-        
-        lvgl_port_unlock(); 
-    }
-    else{
-        ESP_LOGE(TAG,"lvgl_port_lock_failed");
-    }
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    chatcreen_create_chat(0,"laiyang12nineein你好");
-    vTaskDelay(pdMS_TO_TICKS(500));
-    chatcreen_chat_add_text(0,"你好,laiyang12nineein");
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    chatcreen_create_chat(1,"djonfikbnikebikcwf");
-    vTaskDelay(pdMS_TO_TICKS(500));
-    chatcreen_chat_add_text(1,"laiyang12nineein你好");
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    chatcreen_create_chat(2,"djonfikbnikebikcwf");
-    vTaskDelay(pdMS_TO_TICKS(500));
-    chatcreen_chat_add_text(2,"laiyang12n你好ineein");
-    lvgl_port_lock(portMAX_DELAY);
 
-    lvgl_port_unlock();
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    chatcreen_create_chat(3,"djonfikbnikebikcwf");
 
     // lvgl_port_lock(portMAX_DELAY);
     // lv_obj_clean(chat_button[1]);
@@ -545,6 +608,9 @@ void app_main(void)
     print_memory_info();
     //初始化wifi,连接wifi网络
     ESP_ERROR_CHECK(bsp_wifi_init());
+
+        //初始化系统通知事件组
+    system_event_group = xEventGroupCreate(); 
         // 创建二值信号量
     play_semaphore = xSemaphoreCreateBinary();//同步播放任务
     play_buffer = heap_caps_malloc(20680, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -555,7 +621,7 @@ void app_main(void)
     }
     print_memory_info();
     //创建websocket消息处理队列，用于提取音频等数据
-    websocket_queue=xQueueCreate(6,sizeof(struct EventData));
+    websocket_queue=xQueueCreate(20,sizeof(struct EventData));
     if(websocket_queue==NULL)
     {
         ESP_LOGE(TAG,"websocket queue create failed");
@@ -578,10 +644,8 @@ void app_main(void)
         }
          vTaskDelay(pdMS_TO_TICKS(500));
     }
-    // vTaskDelay(pdMS_TO_TICKS(1000)); //延时等待session.created事件
 
-
-    audio_ring_buffer=bsp_ring_buffer_init(1024*1024);//1M的音频环形缓存空间
+    audio_ring_buffer=bsp_ring_buffer_init(1024*1024);//创建1M的音频环形缓存空间
     if(audio_ring_buffer==NULL)
     {
         ESP_LOGE(TAG,"audio_ring_buffer_init_failed");
@@ -607,42 +671,45 @@ void app_main(void)
 
     qwen_init();
     app_sr_init();  //初始化语音模块
-    ESP_LOGE(TAG,"CREATE");
+
     print_memory_info();
-    xTaskCreatePinnedToCore(qwen_message_handle_task, "qwen_message_handle_task", 4096, NULL, 5, NULL, 1);
-    xTaskCreatePinnedToCore(play_task, "play_task", 4*1024, NULL, 5, NULL, 0);
-    if(xTaskCreatePinnedToCore(lcd_show_task, "lcd_show_task", 4096, NULL, 2, NULL, 0)!=pdPASS)
+    if(xTaskCreatePinnedToCore(qwen_message_handle_task, "qwen_message_handle_task", 4096, NULL, 20, NULL, 1)!=pdPASS)
+    {
+        ESP_LOGE(TAG,"qwen_message_handle_task_create_failed");
+    }
+    if(xTaskCreatePinnedToCore(play_task, "play_task", 4*1024, NULL, 7, NULL, 0)!=pdPASS)
+    {
+        ESP_LOGE(TAG,"play_task_create_failed");
+    }
+    if(xTaskCreatePinnedToCore(lcd_show_task, "lcd_show_task", 4096, NULL, 3, NULL, 0)!=pdPASS)
     {
         ESP_LOGE(TAG,"lcd_show_task_create_failed");
     }
     print_memory_info();
+
+
+
     //     //初始化千问模型访问接口
     // while(is_session_create==false) //等待session.created事件
     // {
     //     vTaskDelay(pdMS_TO_TICKS(100));
     // }
     
-    
-    
-    // app_sr_test();
-    // char *read_buffer = heap_caps_malloc(640, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);      //读出的原始音频数据
-    // char *read_buffer_encode=heap_caps_malloc(857,MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);//base64编码后的字符数据
-
-    size_t encode_len=0;
-
-    // ESP_LOGE(TAG,"RUNNING IN LVGL");
-
-    // lvgl_port_lock(0);
-    // // lv_obj_t * button = lv_button_create(lv_screen_active());
-    // // lv_obj_center(button);
-    // // lv_obj_set_height(button,100);
-    // // lv_obj_set_width(button,100);
-
-    // // lv_obj_t * label = lv_label_create(button);
-    // // lv_label_set_text(label, "Hello from LVGL!");
-    // lv_demo_benchmark();
-    // lvgl_port_unlock(); 
-         
+     ESP_LOGW(TAG,"System init success");    
+    if(lvgl_port_lock(0))
+    {
+        //lv_demo_benchmark();  //demo
+        //lv_scr_load(mainscreen);
+        //lv_scr_load(camerascreen);
+        lv_scr_load(mainscreen);
+        // lv_obj_t * label = lv_label_create(lv_scr_act());
+        // lv_label_set_text(label, "Hello from LVGL!");
+        // lv_obj_center(label);
+        lvgl_port_unlock(); 
+    }
+    else{
+        ESP_LOGE(TAG,"lvgl_port_lock_failed");
+    }
     while(1)
     {
 
@@ -652,7 +719,7 @@ void app_main(void)
         //                 qwen_send_audio(read_buffer_encode,encode_len);
         // UBaseType_t high_water_mark_words = uxTaskGetStackHighWaterMark(NULL);
         // ESP_LOGE(TAG,"main_words:%d",high_water_mark_words);
-         print_memory_info();
-        vTaskDelay(pdMS_TO_TICKS(3000));
+        //print_memory_info();
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }

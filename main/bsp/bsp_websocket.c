@@ -105,8 +105,8 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
         // }
         break;
     case WEBSOCKET_EVENT_DATA:
-            ESP_LOGI(TAG, "收到WebSocket数据，长度: %d 字节, op_code: 0x%02x", 
-                    data->data_len, data->op_code);
+            //ESP_LOGI(TAG, "收到WebSocket数据，长度: %d 字节, op_code: 0x%02x",
+            //        data->data_len, data->op_code);
             // ESP_LOGI(TAG, "pay_len:%d, pay_offset:%d", 
             //         data->payload_len, data->payload_offset);
                     
@@ -133,11 +133,11 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
             }
             break;
     case WEBSOCKET_EVENT_CLOSED:
-        ESP_LOGI(TAG, "WEBSOCKET_EVENT_CLOSED");
+        ESP_LOGE(TAG, "WEBSOCKET_EVENT_CLOSED");
 
         break;
     case WEBSOCKET_EVENT_ERROR:
-        ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
+        ESP_LOGE(TAG, "WEBSOCKET_EVENT_ERROR");
         // log_error_if_nonzero("HTTP status code",  data->error_handle.esp_ws_handshake_status_code);
         // if (data->error_handle.error_type == WEBSOCKET_ERROR_TYPE_TCP_TRANSPORT) {
         //     log_error_if_nonzero("reported from esp-tls", data->error_handle.esp_tls_last_esp_err);

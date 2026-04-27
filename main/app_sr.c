@@ -25,6 +25,12 @@
 
 static const char *TAG="app_sr";
 
+extern EventGroupHandle_t system_event_group;
+extern const int system_event_main;     //切换到主页面
+extern const int system_event_camera;    //切换到摄像头页面
+extern const int system_event_chat;     //切换到对话页面
+extern const int system_event_opencamera;     //打开摄像头设备
+
 static model_iface_data_t       *model_data     = NULL;
 static const esp_mn_iface_t     *multinet       = NULL;
 static const esp_afe_sr_iface_t *afe_handle     = NULL;
@@ -40,9 +46,9 @@ static EventGroupHandle_t    audio_qianwen_eventgroup=NULL;  //音频是否发�
 static volatile bool is_connect_qianwen =false;  //是否连接千问的标志位
 bool volatile is_play_flag =false;         //是否正在播放的标志位
 const char *cmd_phoneme[12] = { //命令词列表
-    "lian jie qian wen",
-    "guan bi qian wen",
-    "da kai tai deng",
+    "zhu ye mian",
+    "zi pai ye mian",
+    "dui hua ye mian",
     "guan bi tai deng",
     "tai deng tiao liang",
     "tai deng tiao an",
@@ -161,7 +167,7 @@ static void audio_detect_task(void *pvParam)
                 if (ESP_MN_STATE_TIMEOUT == mn_state) //命令词检测超时
                 {
                     ESP_LOGW(TAG, "mn_state: Time out");  
-                     afe_handle->enable_wakenet(afe_data);   //重新打开唤醒词网络
+                    afe_handle->enable_wakenet(afe_data);   //重新打开唤醒词网络
                     mn_word_detect_flag = false;
                     vTaskDelay(pdMS_TO_TICKS(5));
                     continue;
@@ -173,7 +179,20 @@ static void audio_detect_task(void *pvParam)
                         ESP_LOGE(TAG, "TOP %d, command_id: %d, phrase_id: %d, prob: %f",
                                 i + 1, mn_result->command_id[i], mn_result->phrase_id[i], mn_result->prob[i]);
                     }
-                    if(mn_result->command_id[0]==0) //连接千问
+                    if(mn_result->command_id[0]==0) //主页面
+                    {
+                        xEventGroupSetBits(system_event_group,system_event_main);
+                    }
+                    else if(mn_result->command_id[0]==1)//自拍页面
+                    {
+                        xEventGroupSetBits(system_event_group,system_event_camera);
+                        xEventGroupSetBits(system_event_group,system_event_opencamera);
+                    }
+                    else if(mn_result->command_id[0]==2)
+                    {
+                        xEventGroupSetBits(system_event_group,system_event_chat);
+                    }
+                    if(mn_result->command_id[0]==2) //连接千问
                     {
                         is_connect_qianwen=true;
                         //afe_handle->disable_se(afe_data);   //重新打开唤醒词网络

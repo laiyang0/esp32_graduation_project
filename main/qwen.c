@@ -9,7 +9,7 @@
 
 const char *websocket_url = "wss://dashscope.aliyuncs.com/api-ws/v1/realtime?model=qwen3-omni-flash-realtime";
 // API Key
-const char *api_key ="";
+const char *api_key ="sk-c31a39382cf0482a9d489ddb9d811724";
 
 
 static const char *TAG="qwen";

@@ -9,7 +9,7 @@ idf_component_register(
         "./bsp/bsp_websocket.c"
         "./bsp/bsp_ring_buffer.c"
         "./ui/ui_init.c"
-        "./ui/fonts/ui_test_24_data.c"
+        "./ui/fonts/ui_font_20.c"
         "./ui/screens/ui_main.c"
         "./ui/screens/ui_camera.c"
         "./ui/screens/ui_chat.c"
