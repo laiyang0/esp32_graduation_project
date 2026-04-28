@@ -39,7 +39,7 @@ extern lv_obj_t * chat_list;            //对话列表对象指针
 // extern lv_obj_t *chat_button4;            //对话按钮4对象指针
 // extern lv_obj_t *chat_textarea4;          //对话输入框4对象指针
 
-#define chat_index_max  6  //对话索引的最大值
+#define chat_index_max  4  //对话索引的最大值
 extern lv_obj_t *chat_button[chat_index_max];    //对话按钮对象指针数组
 extern lv_obj_t *chat_textarea[chat_index_max];  //对话输入框对象指针
 

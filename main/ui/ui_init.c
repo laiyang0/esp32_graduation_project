@@ -35,7 +35,7 @@ esp_err_t app_lvgl_init(void)
 {
     /* Initialize LVGL */
     const lvgl_port_cfg_t lvgl_cfg = {
-        .task_priority =2,         /* LVGL task priority */
+        .task_priority =4,         /* LVGL task priority */
         .task_stack = 8196,         /* LVGL task stack size */
         .task_affinity = -1,        /* LVGL task pinned to core (-1 is no affinity) */
         .task_max_sleep_ms = 500,   /* Maximum sleep in LVGL task */

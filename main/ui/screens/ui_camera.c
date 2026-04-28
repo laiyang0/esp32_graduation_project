@@ -15,6 +15,7 @@ lv_obj_t * camerascreen_create(void)
     camera_canvas_buff=heap_caps_malloc(CANVAS_WIDTH * CANVAS_HEIGHT*sizeof(lv_color_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if(camera_canvas_buff==NULL) {
         ESP_LOGE(TAG,"camera_canvas_buff_heap_malloc_failed");
+        lvgl_port_unlock();
         return NULL;
     }
     lv_obj_t *camera_screen=lv_obj_create(NULL);

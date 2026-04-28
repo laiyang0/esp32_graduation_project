@@ -16,6 +16,7 @@
 #include "lwip/sockets.h"
 #include "freertos/queue.h"
 #include <stdint.h>
+#include <string.h>
 
 // #include "esp_audio_enc.h"
 // #include "esp_codec_dev_defaults.h"
@@ -54,7 +55,26 @@ const int system_event_camera= BIT1;    //切换到摄像头页面
 const int system_event_chat = BIT2;     //切换到对话页面
 const int system_event_opencamera = BIT3;     //打开摄像头设备
 
+volatile bool response_done_flag=false; //服务器端的单次会话结束标识
+
+volatile bool response_chat_created=false;
 static const char *TAG = "main_task";
+
+#define WEBSOCKET_QUEUE_LENGTH 64
+#define WEBSOCKET_QUEUE_SEND_TIMEOUT_MS 5
+#define UI_QUEUE_LENGTH 16
+#define UI_TEXT_MAX_LEN 192
+
+typedef enum {
+    UI_CHAT_CMD_CREATE = 0,
+    UI_CHAT_CMD_APPEND = 1,
+} ui_chat_cmd_type_t;
+
+typedef struct {
+    ui_chat_cmd_type_t type;
+    uint8_t chat_index;
+    char text[UI_TEXT_MAX_LEN];
+} ui_chat_cmd_t;
 
 // 定义音频数据队列
 #define QUEUE_LENGTH 10
@@ -62,6 +82,7 @@ static const char *TAG = "main_task";
 #define QUEUE_ITEM_SIZE I2S_BUF_SIZE
 static QueueHandle_t audio_queue;
 static QueueHandle_t websocket_queue;
+static QueueHandle_t ui_queue;
 
 
 // 定义全局缓冲区
@@ -201,7 +222,7 @@ void qwen_message_handle_task(void *arg) {
     //bsp_ring_buffer_init();
     while(1)
     {
-        if (xQueueReceive(websocket_queue,&queue_data,0) == pdPASS) //接收到服务器的json数据
+        if (xQueueReceive(websocket_queue,&queue_data,portMAX_DELAY) == pdPASS) //接收到服务器的json数据
         {
             //ESP_LOGE(TAG,"qwen_message_handle_task:data_len:%d,pay_len:%d,pay_offset:%d",queue_data.data_len,queue_data.payload_len,queue_data.payload_offset);
             // ESP_LOGI(TAG,"receive:%s",queue_data.data);
@@ -274,6 +295,7 @@ void qwen_message_handle_task(void *arg) {
                             
                             break;
                         case response_done:
+                            response_done_flag=true;
                             ESP_LOGI(TAG, "Response done");//一次对话过程完成
                             
                             break;
@@ -320,7 +342,7 @@ void qwen_message_handle_task(void *arg) {
                         case response_content_part_added:   //这里表示开始接收回复的音频的文字转写内容,在这里进行对话回复框的建立
                             //systerm_conversation_index
                             //chatcreen_create_chat(2*systerm_conversation_index+1,NULL); //创建消息回复对话框
-                            text_ring_buffer=bsp_ring_buffer_init(2*1024);              //创建2k的文本环形缓冲区
+                            //text_ring_buffer=bsp_ring_buffer_init(2*1024);              //创建2k的文本环形缓冲区
                             ESP_LOGI(TAG, "Content part added");
                             break;
                         case response_content_part_done:
@@ -384,13 +406,14 @@ void qwen_message_handle_task(void *arg) {
             }
             
         }
-        vTaskDelay(pdMS_TO_TICKS(2));
+        //vTaskDelay(pdMS_TO_TICKS(2));
     }
 }
 void play_task(void *arg)
 {
     ESP_LOGI(TAG, "play_task start");
     uint8_t read_buffer[640];
+    uint8_t text_data[4]={0,0,0,0};
     uint8_t  text_time_count=0;//文本时间计数
     while(1)
     {
@@ -399,31 +422,35 @@ void play_task(void *arg)
         {
             if(ring_buffer_write_count==10) //第十次语音数据，第5s时
             {
-                chatcreen_create_chat(2*systerm_conversation_index+1,NULL); //创建消息回复对话框
+                chatcreen_create_chat(2*systerm_conversation_index+1,NULL); //创建消息回复对话框，随着消息对话框的创建，这里会消耗较多的栈内存
             }
             vTaskDelay(pdMS_TO_TICKS(18)); 
             
             continue;
         }
-        //读取音频转写文本数据写入屏幕
-        uint8_t text_data[7]={0,0,0,0,0,0,0};
-        text_time_count++;
-        if(text_time_count==22) //0.22s
+        if(text_ring_buffer!=NULL)  //确保没有被删除可以进行读取
         {
-            text_time_count=0;
-            memset(text_data,0,7);
-            uint8_t read_text_len=bsp_ring_buffer_read(text_ring_buffer,text_data,6); //计算得出每0.22s，即220ms播放一个字
-            if(read_text_len==6||read_text_len==3)    //成功读取到一个/两个字
+            //读取音频转写文本数据写入屏幕
+            text_time_count++;
+            if(text_time_count==13) //0.22s
             {
-                //ESP_LOGE(TAG,"text_data:%s",text_data);
-                chatcreen_chat_add_text(2*systerm_conversation_index+1,(char *)text_data); //向本次的对话回复框写入数据
-            }
-            else if(read_text_len==0)   //这里表示text_ring_buff的数据读完
-            {
-                bsp_ring_buffer_deinit(text_ring_buffer);   //释放该环形缓冲区
-                systerm_conversation_index++;   //对话索引加1
+                text_time_count=0;
+                memset(text_data,0,4);
+                uint8_t read_text_len=bsp_ring_buffer_read(text_ring_buffer,text_data,3); //计算得出每0.22s，即220ms播放一个字
+                if(read_text_len==3)    //成功读取到一个/两个字
+                {
+                    //ESP_LOGE(TAG,"text_data:%s",text_data);
+                    chatcreen_chat_add_text(2*systerm_conversation_index+1,(char *)text_data); //向本次的对话回复框写入数据
+                }
+                else if(read_text_len==0&&response_done_flag)   //这里表示单次对话结束，并且text_ring_buff的数据读完
+                {
+                    // bsp_ring_buffer_deinit(text_ring_buffer);   //释放该环形缓冲区
+                    response_done_flag=false;
+                    systerm_conversation_index++;   //对话索引加1
+                }
             }
         }
+
         
 
         //读取音频数据写入
@@ -541,7 +568,7 @@ void lcd_show_task(void *arg)
         // lvgl_port_unlock(); 
         // vTaskDelay(pdMS_TO_TICKS(1000));
         //esp_camera_fb_return(fb);
-        vTaskDelay(pdMS_TO_TICKS(20));
+        vTaskDelay(pdMS_TO_TICKS(30));
     }
 }
 void print_memory_info() {
@@ -646,6 +673,7 @@ void app_main(void)
     }
 
     audio_ring_buffer=bsp_ring_buffer_init(1024*1024);//创建1M的音频环形缓存空间
+    text_ring_buffer=bsp_ring_buffer_init(2*1024);    //创建2k的文本环形缓冲区
     if(audio_ring_buffer==NULL)
     {
         ESP_LOGE(TAG,"audio_ring_buffer_init_failed");
@@ -677,7 +705,7 @@ void app_main(void)
     {
         ESP_LOGE(TAG,"qwen_message_handle_task_create_failed");
     }
-    if(xTaskCreatePinnedToCore(play_task, "play_task", 4*1024, NULL, 7, NULL, 0)!=pdPASS)
+    if(xTaskCreatePinnedToCore(play_task, "play_task", 5*1024, NULL, 7, NULL, 0)!=pdPASS)
     {
         ESP_LOGE(TAG,"play_task_create_failed");
     }
