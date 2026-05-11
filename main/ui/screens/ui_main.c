@@ -13,7 +13,7 @@ lv_obj_t * mainscreen_create(void)
     lv_obj_t *main_screen =lv_obj_create(NULL);  //创建新的屏幕对象
     uint8_t *gifs_mem=NULL;
     size_t gifs_size=0;
-    mmap_gifs_mem_get(1,&gifs_mem,&gifs_size);
+    mmap_gifs_mem_get(0,&gifs_mem,&gifs_size);
             // 1. 构建图像描述符
     static lv_image_dsc_t gif_img_dsc;
     gif_img_dsc.header.magic = LV_IMAGE_HEADER_MAGIC; // 建议设置魔数

@@ -28,6 +28,7 @@
 #include "bsp_wifi.h"
 #include "bsp_websocket.h"
 #include "bsp_ring_buffer.h"
+#include "bsp_communication.h"
 #include "ui_init.h"
 
 #include "cJSON.h"
@@ -580,6 +581,7 @@ void print_memory_info() {
     // heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
 }
 #include "mmap_generate_gifs.h"
+
 void app_main(void) 
 {
     // 初始化NVS
@@ -588,8 +590,8 @@ void app_main(void)
     //print_memory_info();
     //初始化gifs分区的内存映射
     mmap_gifs_init();
-
-
+    //初始化与小车的通信
+    bsp_communication_init();
     //初始化lcd
     bsp_lcd_init();
     // bsp_lcd_full_color(0XFFFF);         //白色
@@ -738,8 +740,22 @@ void app_main(void)
     else{
         ESP_LOGE(TAG,"lvgl_port_lock_failed");
     }
+    uint8_t *CPU_RunInfo= heap_caps_malloc(1000, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);;
     while(1)
     {
+        // bsp_communication_write_command(0);
+        // vTaskDelay(pdMS_TO_TICKS(100));
+        // bsp_communication_write_command(1);
+        // vTaskDelay(pdMS_TO_TICKS(100));
+        // bsp_communication_write_command(2);
+        // vTaskDelay(pdMS_TO_TICKS(100));
+
+        memset(CPU_RunInfo, 0, 1000);
+        vTaskGetRunTimeStats((char *)CPU_RunInfo);
+ 
+        ESP_LOGI(TAG,"task_name      run_cnt                 usage_rate   \r\n");
+        ESP_LOGI(TAG,"%s", CPU_RunInfo);
+        ESP_LOGI(TAG,"----------------------------------------------------\r\n");
 
         // bsp_8311_read(read_buffer,640);
         // bsp_enc_dec_encode_base64((uint8_t *)read_buffer,640,read_buffer_encode,857,&encode_len);  //原始PCM数据编码成base64
@@ -748,6 +764,6 @@ void app_main(void)
         // UBaseType_t high_water_mark_words = uxTaskGetStackHighWaterMark(NULL);
         // ESP_LOGE(TAG,"main_words:%d",high_water_mark_words);
         //print_memory_info();
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }

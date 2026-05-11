@@ -8,6 +8,7 @@ idf_component_register(
         "./bsp/bsp_wifi.c"
         "./bsp/bsp_websocket.c"
         "./bsp/bsp_ring_buffer.c"
+        "./bsp/bsp_communication.c"
         "./ui/ui_init.c"
         "./ui/fonts/ui_font_20.c"
         "./ui/screens/ui_main.c"
