@@ -472,7 +472,10 @@ void play_task(void *arg)
             //ESP_LOGE(TAG,"rb_write:%d,read:%d",audio_ring_buffer->write_index,audio_ring_buffer->read_index);
             bsp_8311_write(read_buffer,read_len);
         }
-        vTaskDelay(pdMS_TO_TICKS(18)); 
+        else{
+            vTaskDelay(pdMS_TO_TICKS(18)); 
+        }
+        //vTaskDelay(pdMS_TO_TICKS(18)); 
     }
 }
 void lcd_show_task(void *arg)

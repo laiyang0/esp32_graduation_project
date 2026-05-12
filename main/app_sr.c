@@ -98,12 +98,15 @@ static void audio_feed_task(void *pvParam)
             //      //ESP_LOGI(TAG,"AUDIO_RB_WRITE:%d",audio_len);
             // }
             //xEventGroupSetBits(audio_qianwen_eventgroup,AUDIO_QWEN_BIT);
+
+            vTaskDelay(pdMS_TO_TICKS(30));
         }
         // if()
 
         // UBaseType_t high_water_mark_words = uxTaskGetStackHighWaterMark(NULL);
         // ESP_LOGE(TAG,"audio_feed:%d",high_water_mark_words);
-        vTaskDelay(pdMS_TO_TICKS(30));
+
+        //vTaskDelay(pdMS_TO_TICKS(30));
     }
 
 }
@@ -128,7 +131,7 @@ static void audio_detect_task(void *pvParam)
             //result = afe_handle->fetch_with_delay(afe_data, 100 / portTICK_PERIOD_MS);
             if (result==NULL || result->ret_value == ESP_FAIL) {
                 ESP_LOGE(TAG, "fetch error!");
-                vTaskDelay(pdMS_TO_TICKS(5));
+                //vTaskDelay(pdMS_TO_TICKS(5));
                 continue;
             }
             //int16_t *processed_audio = result->data;
@@ -160,16 +163,16 @@ static void audio_detect_task(void *pvParam)
 
                 if (ESP_MN_STATE_DETECTING == mn_state) //命令词检测中
                 {
-                    vTaskDelay(pdMS_TO_TICKS(5));
+                    //vTaskDelay(pdMS_TO_TICKS(5));
                     continue;
                 }
 
                 if (ESP_MN_STATE_TIMEOUT == mn_state) //命令词检测超时
                 {
                     ESP_LOGW(TAG, "mn_state: Time out");  
-                    afe_handle->enable_wakenet(afe_data);   //重新打开唤醒词网络
-                    mn_word_detect_flag = false;
-                    vTaskDelay(pdMS_TO_TICKS(5));
+                    // afe_handle->enable_wakenet(afe_data);   //重新打开唤醒词网络
+                    // mn_word_detect_flag = false;
+                    //vTaskDelay(pdMS_TO_TICKS(5));
                     continue;
                 }
                 if(ESP_MN_STATE_DETECTED == mn_state)   //成功检测出命令词
@@ -179,6 +182,8 @@ static void audio_detect_task(void *pvParam)
                         ESP_LOGE(TAG, "TOP %d, command_id: %d, phrase_id: %d, prob: %f",
                                 i + 1, mn_result->command_id[i], mn_result->phrase_id[i], mn_result->prob[i]);
                     }
+                    afe_handle->enable_wakenet(afe_data);   //重新打开唤醒词网络
+                    mn_word_detect_flag = false;
                     if(mn_result->command_id[0]==0) //主页面
                     {
                         xEventGroupSetBits(system_event_group,system_event_main);
@@ -209,10 +214,13 @@ static void audio_detect_task(void *pvParam)
                 }
             }
         }
+        else{
+            vTaskDelay(pdMS_TO_TICKS(5));
+        }
 
         // UBaseType_t high_water_mark_words = uxTaskGetStackHighWaterMark(NULL);
         // ESP_LOGE(TAG,"audio_detect:%d",high_water_mark_words);
-        vTaskDelay(pdMS_TO_TICKS(5));
+        //vTaskDelay(pdMS_TO_TICKS(5));
 
         // if vad cache is exists, please attach the cache to the front of processed_audio to avoid data loss
         // if (result->vad_cache_size > 0) {
@@ -249,14 +257,21 @@ static void audio_qianwen_task(void *pvParam)
             //     // //ESP_LOGE(TAG,"encode_len:%d",encode_len);
             //     qwen_send_audio(read_buffer_encode,encode_len);
             // }
-            bsp_8311_read(read_buffer,640);    //读出初始的音频数据
+            if(bsp_8311_read(read_buffer,640)!=ESP_OK)    //读出初始的音频数据
+            {
+                ESP_LOGE(TAG,"read fail");
+                continue;
+            }
             bsp_enc_dec_encode_base64((uint8_t *)read_buffer,640,read_buffer_encode,857,&encode_len);
             qwen_send_audio(read_buffer_encode,encode_len);
+        }
+        else{
+            vTaskDelay(pdMS_TO_TICKS(20));
         }
         // UBaseType_t high_water_mark_words = uxTaskGetStackHighWaterMark(NULL);
         // ESP_LOGE(TAG,"audio_qianwen:%d",high_water_mark_words);
 
-        vTaskDelay(pdMS_TO_TICKS(20));
+       
     }
 }
 esp_err_t app_sr_init(void)
