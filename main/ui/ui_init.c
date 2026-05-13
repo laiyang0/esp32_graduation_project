@@ -4,6 +4,8 @@
 #include "bsp_lcd.h"
 // #include "lvgl.h"
 
+//开始页面所有对象
+lv_obj_t *startscreen=NULL;              //开始页面对象指针
 //主页面所有对象
 lv_obj_t *mainscreen=NULL;              //主页面对象指针
 
@@ -14,18 +16,12 @@ lv_obj_t * camera_canvas=NULL;          //摄像头画布对象指针
 //对话界面所有对象
 lv_obj_t *chatscreen=NULL;               //对话页面对象指针
 lv_obj_t * chat_list=NULL;              //对话列表对象指针
-// lv_obj_t *chat_button1=NULL;            //对话按钮1对象指针
-// lv_obj_t * chat_textarea1=NULL;         //对话输入框1对象指针
-// lv_obj_t *chat_button2=NULL;            //对话按钮2对象指针
-// lv_obj_t *chat_textarea2=NULL;          //对话输入框2对象指针
-// lv_obj_t *chat_button3=NULL;            //对话按钮3对象指针
-// lv_obj_t * chat_textarea3=NULL;         //对话输入框3对象指针
-// lv_obj_t *chat_button4=NULL;            //对话按钮4对象指针
-// lv_obj_t *chat_textarea4=NULL;          //对话输入框4对象指针
 
+lv_obj_t *chat_button[chat_index_max]={NULL,NULL,NULL,NULL};
+lv_obj_t *chat_textarea[chat_index_max]={NULL,NULL,NULL,NULL};
 
-lv_obj_t *chat_button[chat_index_max]={NULL,NULL,NULL,NULL,NULL,NULL};
-lv_obj_t *chat_textarea[chat_index_max]={NULL,NULL,NULL,NULL,NULL,NULL};
+//控制页面所有对象
+lv_obj_t *controlscreen=NULL;               //小车控制页面对象指针
 
 static const char *TAG="ui_init";
 
@@ -37,7 +33,7 @@ esp_err_t app_lvgl_init(void)
     const lvgl_port_cfg_t lvgl_cfg = {
         .task_priority =4,         /* LVGL task priority */
         .task_stack = 8196,         /* LVGL task stack size */
-        .task_affinity = -1,        /* LVGL task pinned to core (-1 is no affinity) */
+        .task_affinity = 1,        /* LVGL task pinned to core (-1 is no affinity) */
         .task_max_sleep_ms = 500,   /* Maximum sleep in LVGL task */
         .timer_period_ms = 5,        /* LVGL timer tick period in ms */
     };

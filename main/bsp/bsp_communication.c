@@ -7,8 +7,8 @@
 const int uart_buffer_size = (1024 * 2);
 static QueueHandle_t uart_queue;
 #define BSP_UART_NUM UART_NUM_2
-#define BSP_UART_TXD_PIN 38
-#define BSP_UART_RXD_PIN 48
+#define BSP_UART_TXD_PIN 48
+#define BSP_UART_RXD_PIN 38
 #define BSP_UART_BAUDRATE 115200
 #define PATTERN_CHR_NUM    (3)
 
@@ -131,19 +131,19 @@ void bsp_communication_write_command(bsp_communication_command_t command)
     switch(command)
     {
         case BSP_COMMNUICATION_STOP:
-            uart_write_bytes(BSP_UART_NUM, "0+++\n", strlen("0+++\n"));
+            uart_write_bytes(BSP_UART_NUM, "0+++", strlen("0+++"));
             break;
         case BSP_COMMUNICATION_FORWARD:
-            uart_write_bytes(BSP_UART_NUM, "1+++\n", strlen("1+++\n")); 
+            uart_write_bytes(BSP_UART_NUM, "1+++", strlen("1+++")); 
             break;
         case BSP_COMMUNICATION_BACKWARD:
-            uart_write_bytes(BSP_UART_NUM, "2+++\n", strlen("2+++\n"));
+            uart_write_bytes(BSP_UART_NUM, "2+++", strlen("2+++"));
             break;
         case BSP_COMMUNICATION_LEFT:
-            uart_write_bytes(BSP_UART_NUM, "3+++\n", strlen("3+++\n"));
+            uart_write_bytes(BSP_UART_NUM, "3+++", strlen("3+++"));
             break;
         case BSP_COMMUNICATION_RIGHT:
-            uart_write_bytes(BSP_UART_NUM, "4+++\n", strlen("4+++\n"));
+            uart_write_bytes(BSP_UART_NUM, "4+++", strlen("4+++"));
             break;
         default:
             break;

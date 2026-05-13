@@ -55,6 +55,12 @@ const int system_event_main = BIT0;     //切换到主页面
 const int system_event_camera= BIT1;    //切换到摄像头页面
 const int system_event_chat = BIT2;     //切换到对话页面
 const int system_event_opencamera = BIT3;     //打开摄像头设备
+const int system_event_car= BIT4;     //切换到汽车控制页面
+const int system_event_car_stop=BIT5;   //停车
+const int system_event_car_forward=BIT6;   //前进
+const int system_event_car_backward=BIT7;   //后退
+const int system_event_car_left=BIT8;       //左转
+const int system_event_car_right=BIT9;      //右转
 
 volatile bool response_done_flag=false; //服务器端的单次会话结束标识
 
@@ -490,11 +496,11 @@ void lcd_show_task(void *arg)
     // lv_obj_t * about_screen=screen_about_create();
     //lv_scr_load(main_screen);                       // 加载并显示主屏幕
     //vTaskDelay(pdMS_TO_TICKS(2000));
-    
+    uint8_t is_car_flag=false;
     while(1)
     {
         EventBits_t uxBits = xEventGroupWaitBits(system_event_group,      // 事件组句柄
-                                                 system_event_main |system_event_camera|system_event_chat|system_event_opencamera, // 等待的位
+                                                 system_event_main |system_event_camera|system_event_chat|system_event_opencamera|system_event_car, // 等待的位
                                                  pdFALSE,           // 退出时清除这些位
                                                  pdFALSE,           // 等待所有位
                                                  0);   // 非阻塞
@@ -507,6 +513,8 @@ void lcd_show_task(void *arg)
                 xEventGroupClearBits(system_event_group, system_event_main);
                 xEventGroupClearBits(system_event_group, system_event_opencamera);//关闭摄像头设备
             }
+            is_car_flag=false;
+            bsp_communication_write_command(BSP_COMMNUICATION_STOP);
             ESP_LOGE(TAG,"MAIN_RUNNING");
         }
         if(uxBits&system_event_camera)
@@ -517,6 +525,8 @@ void lcd_show_task(void *arg)
                 lvgl_port_unlock(); 
                 xEventGroupClearBits(system_event_group, system_event_camera);
             }
+            is_car_flag=false;
+            bsp_communication_write_command(BSP_COMMNUICATION_STOP);
             ESP_LOGE(TAG,"CAMERA_RUNNING");
         }
         if(uxBits&system_event_chat)
@@ -528,7 +538,21 @@ void lcd_show_task(void *arg)
                 xEventGroupClearBits(system_event_group, system_event_chat);
                 xEventGroupClearBits(system_event_group, system_event_opencamera);//关闭摄像头设备
             }
+            is_car_flag=false;
+            bsp_communication_write_command(BSP_COMMNUICATION_STOP);
             ESP_LOGE(TAG,"CHAT_RUNNING");
+        }
+        if(uxBits&system_event_car)
+        {
+            if(lvgl_port_lock(0))
+            {
+                lv_scr_load(controlscreen);
+                lvgl_port_unlock(); 
+                xEventGroupClearBits(system_event_group, system_event_car);
+                is_car_flag=true;
+                ESP_LOGE(TAG,"MOVING_RUNNING");
+                xEventGroupClearBits(system_event_group, system_event_opencamera);//关闭摄像头设备
+            }
         }
         if(uxBits&system_event_opencamera)  //打开摄像头
         {
@@ -553,6 +577,45 @@ void lcd_show_task(void *arg)
             }
             esp_camera_fb_return(fb);
         }
+        if(is_car_flag) //
+        {
+            uxBits = xEventGroupWaitBits(system_event_group,      // 事件组句柄
+                                                 system_event_car_stop|system_event_car_forward|system_event_car_backward|system_event_car_left|system_event_car_right, // 等待的位
+                                                 pdFALSE,           // 退出时清除这些位
+                                                 pdFALSE,           // 等待所有位
+                                                 0);   // 非阻塞
+            if(uxBits&system_event_car_stop)
+            {
+                ESP_LOGE(TAG,"STOP");
+                bsp_communication_write_command(BSP_COMMNUICATION_STOP);
+                xEventGroupClearBits(system_event_group, system_event_car_stop);
+            }
+            else if(uxBits&system_event_car_forward)
+            {
+                ESP_LOGE(TAG,"FORWARD");
+                bsp_communication_write_command(BSP_COMMUNICATION_FORWARD);
+                xEventGroupClearBits(system_event_group, system_event_car_forward);
+            }
+            else if(uxBits&system_event_car_backward)
+            {
+                ESP_LOGE(TAG,"BACKWARD");
+                bsp_communication_write_command(BSP_COMMUNICATION_BACKWARD);
+                xEventGroupClearBits(system_event_group, system_event_car_backward);
+            }
+            else if(uxBits&system_event_car_left)
+            {
+                ESP_LOGE(TAG,"LEFT");
+                bsp_communication_write_command(BSP_COMMUNICATION_LEFT);
+                xEventGroupClearBits(system_event_group,system_event_car_left);
+            }
+            else if(uxBits&system_event_car_right)
+            {
+                ESP_LOGE(TAG,"RIGHT");
+                bsp_communication_write_command(BSP_COMMUNICATION_RIGHT);
+                xEventGroupClearBits(system_event_group,system_event_car_right);
+            }
+        }
+
 
         
         // lv_canvas_set_buffer(canvas1, fb->buf, fb->width, fb->height, LV_COLOR_FORMAT_RGB565);
@@ -626,14 +689,16 @@ void app_main(void)
     app_lvgl_init();
     // print_memory_info();
         // 在 LVGL 中显示 GIF
+    startscreen=startscreen_create();       //创建start页面
     mainscreen=mainscreen_create();         //创建lvgl主页面
     camerascreen=camerascreen_create();     //创建camera页面
     chatscreen=chatcreen_create();          //创建chat页面
+    controlscreen=controlscreen_create();    //创建control页面
 
 
-    // lvgl_port_lock(portMAX_DELAY);
-    // lv_obj_clean(chat_button[1]);
-    // lvgl_port_unlock();
+    lvgl_port_lock(portMAX_DELAY);
+    lv_scr_load(startscreen);
+    lvgl_port_unlock();
 
 
 
@@ -746,7 +811,7 @@ void app_main(void)
     uint8_t *CPU_RunInfo= heap_caps_malloc(1000, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);;
     while(1)
     {
-        // bsp_communication_write_command(0);
+        //bsp_communication_write_command(0);
         // vTaskDelay(pdMS_TO_TICKS(100));
         // bsp_communication_write_command(1);
         // vTaskDelay(pdMS_TO_TICKS(100));
