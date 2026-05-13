@@ -49,18 +49,44 @@ void mmap_gifs_init()
         },
     };
 
-    mmap_assets_new(&config, &asset_gifs);
+    esp_err_t ret = mmap_assets_new(&config, &asset_gifs);
+    if (ret != ESP_OK) {
+        asset_gifs = NULL;
+        ESP_LOGE(TAG, "mmap gifs init failed: %s", esp_err_to_name(ret));
+        return;
+    }
     ESP_LOGI(TAG, "stored_files:%d", mmap_assets_get_stored_files(asset_gifs));
 }
 void mmap_gifs_mem_get(uint8_t gifs_type,uint8_t **gif_mem,size_t *gif_size)
 {
-    *gif_mem = mmap_assets_get_mem(asset_gifs, gifs_type);
-
-    *gif_size = mmap_assets_get_size(asset_gifs, gifs_type);
-    ESP_LOGI(TAG,"gif_size:%d",*gif_size);
-    if (gif_mem == NULL) {
-        ESP_LOGE(TAG, "Failed to get memory for gif index %d", gifs_type);
-        //return;
+    if (gif_mem == NULL || gif_size == NULL) {
+        ESP_LOGE(TAG, "invalid gif output pointer");
+        return;
     }
+
+    *gif_mem = NULL;
+    *gif_size = 0;
+
+    if (asset_gifs == NULL) {
+        ESP_LOGE(TAG, "gifs asset handle is NULL");
+        return;
+    }
+
+    int stored_files = mmap_assets_get_stored_files(asset_gifs);
+    if (gifs_type >= stored_files) {
+        ESP_LOGE(TAG, "gif index %d out of range, stored_files:%d", gifs_type, stored_files);
+        return;
+    }
+
+    const uint8_t *mem = mmap_assets_get_mem(asset_gifs, gifs_type);
+    int size = mmap_assets_get_size(asset_gifs, gifs_type);
+    if (mem == NULL || size <= 0) {
+        ESP_LOGE(TAG, "Failed to get memory for gif index %d", gifs_type);
+        return;
+    }
+
+    *gif_mem = (uint8_t *)mem;
+    *gif_size = (size_t)size;
+    ESP_LOGI(TAG,"gif_size:%d",size);
     //return gif_mem;
 }
