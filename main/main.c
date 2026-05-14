@@ -742,7 +742,7 @@ void app_main(void)
          vTaskDelay(pdMS_TO_TICKS(500));
     }
 
-    audio_ring_buffer=bsp_ring_buffer_init(1024*1024);//创建1M的音频环形缓存空间
+    audio_ring_buffer=bsp_ring_buffer_init(1536*1024);//创建1.5M的音频环形缓存空间
     text_ring_buffer=bsp_ring_buffer_init(2*1024);    //创建2k的文本环形缓冲区
     if(audio_ring_buffer==NULL)
     {

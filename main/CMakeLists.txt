@@ -59,3 +59,9 @@ spiffs_create_partition_assets(
     FLASH_IN_PROJECT
     MMAP_FILE_SUPPORT_FORMAT ".gif"
 )
+spiffs_create_partition_assets(
+    mp3
+    "../mp3"
+    FLASH_IN_PROJECT
+    MMAP_FILE_SUPPORT_FORMAT ".mp3"
+)

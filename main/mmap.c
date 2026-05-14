@@ -1,4 +1,5 @@
 #include "mmap_generate_gifs.h"
+#include "mmap_generate_mp3.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "mmap.h"
@@ -89,4 +90,24 @@ void mmap_gifs_mem_get(uint8_t gifs_type,uint8_t **gif_mem,size_t *gif_size)
     *gif_size = (size_t)size;
     ESP_LOGI(TAG,"gif_size:%d",size);
     //return gif_mem;
+}
+void mmap_mp3_init()
+{
+    const mmap_assets_config_t config = {
+        .partition_label = "mp3",
+        .max_files = MMAP_MP3_FILES,
+        .checksum = MMAP_MP3_CHECKSUM,
+        .flags = {
+            .mmap_enable = true,
+            .app_bin_check = true,
+        },
+    };
+
+    esp_err_t ret = mmap_assets_new(&config, &asset_gifs);
+    if (ret != ESP_OK) {
+        asset_gifs = NULL;
+        ESP_LOGE(TAG, "mmap mp3 init failed: %s", esp_err_to_name(ret));
+        return;
+    }
+    ESP_LOGI(TAG, "stored_files:%d", mmap_assets_get_stored_files(asset_gifs));
 }
