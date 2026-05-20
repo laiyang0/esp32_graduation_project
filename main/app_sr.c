@@ -44,10 +44,14 @@ static QueueHandle_t            audio_que    = NULL;
 static srmodel_list_t           *models         = NULL;
 static bsp_ring_buffer_t *audio_read_buffer=NULL;      //存储麦克风原始音频的环形缓冲区
 static EventGroupHandle_t    audio_qianwen_eventgroup=NULL;  //音频是否发送到千问事件组
+static SemaphoreHandle_t mic_read_mutex = NULL;
+static SemaphoreHandle_t mic_read_mutex = NULL;
 // esp_afe_sr_data_t *afe_data;
 
 #define AUDIO_WRITE_IN_RB_BIT   BIT0    //视频数据是否写入环形缓冲区的标志位
 #define AUDIO_QWEN_BIT          BIT1    //音频数据是否发送到千问的标志位
+#define QWEN_AUDIO_CHUNK_BYTES  3200
+#define QWEN_AUDIO_B64_BYTES    ((((QWEN_AUDIO_CHUNK_BYTES) + 2) / 3) * 4 + 1)
 
 static volatile bool is_connect_qianwen =false;  //是否连接千问的标志位
 bool volatile is_play_flag =false;         //是否正在播放的标志位
@@ -66,6 +70,21 @@ const char *cmd_phoneme[12] = { //命令词列表
     "da kai ri li"
 };
 
+static esp_err_t app_sr_mic_read(void *buffer, int len)
+{
+    if (mic_read_mutex != NULL) {
+        xSemaphoreTake(mic_read_mutex, portMAX_DELAY);
+    }
+
+    esp_err_t ret = bsp_8311_read(buffer, len);
+
+    if (mic_read_mutex != NULL) {
+        xSemaphoreGive(mic_read_mutex);
+    }
+
+    return ret;
+}
+
 static void audio_feed_task(void *pvParam)
 {
     esp_afe_sr_data_t *afe_data = (esp_afe_sr_data_t *) pvParam;
@@ -81,7 +100,13 @@ static void audio_feed_task(void *pvParam)
         //ESP_LOGI(TAG,"audio feed task running");
         if(!is_connect_qianwen)
         {
-            bsp_8311_read(audio_buffer,audio_chunksize*sizeof(int16_t));    //读出初始的音频数据
+            if(app_sr_mic_read(audio_buffer,audio_chunksize*sizeof(int16_t)) != ESP_OK)    //读出初始的音频数据
+            {
+            {
+                ESP_LOGE(TAG,"audio feed read fail");
+                vTaskDelay(pdMS_TO_TICKS(10));
+                continue;
+            }
             for (int  i = audio_chunksize - 1; i >= 0; i--) //将音频数据填写为双通道，扬声器通道数据默认为0，不使用
             {
                 audio_buffer[i * 2 + 1] = 0;
@@ -265,8 +290,15 @@ static void audio_qianwen_task(void *pvParam)
 {
     ESP_LOGI(TAG, "audio send task start");
     size_t encode_len=0;
-    char *read_buffer = heap_caps_malloc(640, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);      //读出的原始音频数据
-    char *read_buffer_encode=heap_caps_malloc(857,MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);//base64编码后的字符数据
+    char *read_buffer = heap_caps_malloc(QWEN_AUDIO_CHUNK_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);      //读出的原始音频数据
+    char *read_buffer_encode=heap_caps_malloc(QWEN_AUDIO_B64_BYTES,MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);//base64编码后的字符数据
+    char *read_buffer_encode=heap_caps_malloc(QWEN_AUDIO_B64_BYTES,MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if(read_buffer == NULL || read_buffer_encode == NULL)
+    {
+        ESP_LOGE(TAG,"audio qwen buffer malloc failed");
+        vTaskDelete(NULL);
+        return;
+    }
     while(1)
     {
         //if(xEventGroupWaitBits(audio_qianwen_eventgroup, AUDIO_QWEN_BIT, pdFALSE,pdFALSE,0)&AUDIO_QWEN_BIT)
@@ -288,16 +320,32 @@ static void audio_qianwen_task(void *pvParam)
             //     // //ESP_LOGE(TAG,"encode_len:%d",encode_len);
             //     qwen_send_audio(read_buffer_encode,encode_len);
             // }
-            if(bsp_8311_read(read_buffer,640)!=ESP_OK)    //读出初始的音频数据
+            if(app_sr_mic_read(read_buffer,QWEN_AUDIO_CHUNK_BYTES)!=ESP_OK)    //读出初始的音频数据
+            {
             {
                 ESP_LOGE(TAG,"read fail");
                 continue;
             }
-            bsp_enc_dec_encode_base64((uint8_t *)read_buffer,640,read_buffer_encode,857,&encode_len);
-            qwen_send_audio(read_buffer_encode,encode_len);
+            if(bsp_enc_dec_encode_base64((uint8_t *)read_buffer,
+                                         QWEN_AUDIO_CHUNK_BYTES,
+                                         read_buffer_encode,
+                                         QWEN_AUDIO_B64_BYTES,
+                                         &encode_len) != ESP_OK)
+            {
+                ESP_LOGE(TAG,"audio base64 encode fail");
+                continue;
+            }
+            if (qwen_send_audio(read_buffer_encode, encode_len) != ESP_OK) {
+                ESP_LOGW(TAG, "qwen audio send failed, stop upload");
+                is_connect_qianwen = false;
+                xEventGroupClearBits(audio_qianwen_eventgroup, AUDIO_WRITE_IN_RB_BIT);
+                xEventGroupClearBits(audio_qianwen_eventgroup, AUDIO_QWEN_BIT);
+                vTaskDelay(pdMS_TO_TICKS(200));
+            }
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
         else{
-            vTaskDelay(pdMS_TO_TICKS(20));
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
         // UBaseType_t high_water_mark_words = uxTaskGetStackHighWaterMark(NULL);
         // ESP_LOGE(TAG,"audio_qianwen:%d",high_water_mark_words);
@@ -350,6 +398,9 @@ esp_err_t app_sr_init(void)
     //     ESP_LOGE(TAG,"audio_ring_buffer_init fail");
     // }
     audio_qianwen_eventgroup= xEventGroupCreate();      //创建音频是否发送到千问事件组
+    mic_read_mutex = xSemaphoreCreateMutex();
+    mic_read_mutex = xSemaphoreCreateMutex();
+    ESP_RETURN_ON_FALSE(mic_read_mutex != NULL, ESP_FAIL, TAG, "Failed create mic mutex");
 
     BaseType_t ret_val = xTaskCreatePinnedToCore(audio_feed_task, "audio_feed_task", 3 * 1024, afe_data, 10, NULL, 0);
     ESP_RETURN_ON_FALSE(pdPASS == ret_val, ESP_FAIL, TAG,  "Failed create audio feed task");

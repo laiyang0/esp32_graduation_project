@@ -71,6 +71,9 @@ static const char *TAG = "main_task";
 #define WEBSOCKET_QUEUE_SEND_TIMEOUT_MS 5
 #define UI_QUEUE_LENGTH 16
 #define UI_TEXT_MAX_LEN 192
+#define UI_QUEUE_SEND_TIMEOUT_MS 10
+#define QWEN_RX_JSON_BUFFER_SIZE (64 * 1024)
+#define QWEN_AUDIO_PCM_BUFFER_SIZE (32 * 1024)
 
 typedef enum {
     UI_CHAT_CMD_CREATE = 0,
@@ -136,6 +139,68 @@ uint8_t *play_buffer_dec=NULL;
 // 定义信号量句柄
 SemaphoreHandle_t play_semaphore;
 
+static void ui_post_chat_create(uint8_t chat_index, const char *text)
+{
+    if (ui_queue == NULL) {
+        return;
+    }
+
+    ui_chat_cmd_t cmd = {
+        .type = UI_CHAT_CMD_CREATE,
+        .chat_index = chat_index,
+    };
+
+    if (text != NULL) {
+        strncpy(cmd.text, text, sizeof(cmd.text) - 1);
+        cmd.text[sizeof(cmd.text) - 1] = '\0';
+    }
+
+    if (xQueueSend(ui_queue, &cmd, pdMS_TO_TICKS(UI_QUEUE_SEND_TIMEOUT_MS)) != pdPASS) {
+        ESP_LOGE(TAG, "ui_queue send create failed");
+    }
+}
+
+static void ui_post_chat_append(uint8_t chat_index, const char *text)
+{
+    if (ui_queue == NULL || text == NULL) {
+        return;
+    }
+
+    ui_chat_cmd_t cmd = {
+        .type = UI_CHAT_CMD_APPEND,
+        .chat_index = chat_index,
+    };
+
+    strncpy(cmd.text, text, sizeof(cmd.text) - 1);
+    cmd.text[sizeof(cmd.text) - 1] = '\0';
+
+    if (xQueueSend(ui_queue, &cmd, pdMS_TO_TICKS(UI_QUEUE_SEND_TIMEOUT_MS)) != pdPASS) {
+        ESP_LOGE(TAG, "ui_queue send append failed");
+    }
+}
+
+static void ui_process_pending_commands(void)
+{
+    if (ui_queue == NULL) {
+        return;
+    }
+
+    ui_chat_cmd_t cmd;
+    while (xQueueReceive(ui_queue, &cmd, 0) == pdPASS) {
+        switch (cmd.type) {
+            case UI_CHAT_CMD_CREATE:
+                chatcreen_create_chat(cmd.chat_index, cmd.text[0] == '\0' ? NULL : cmd.text);
+                break;
+            case UI_CHAT_CMD_APPEND:
+                chatcreen_chat_add_text(cmd.chat_index, cmd.text);
+                break;
+            default:
+                ESP_LOGW(TAG, "unknown ui cmd:%d", cmd.type);
+                break;
+        }
+    }
+}
+
 //websocket接收回调函数声明
 void bsp_user_event_callback(const struct EventData* event);
 //websocket用户数据接收回调函数
@@ -147,16 +212,48 @@ void bsp_user_event_callback(const struct EventData* event)
         case CONNECTED:
             break;
         case DISCONNECTED:
+            is_session_create = false;
+            current_state = STATE_WAITING_WAKEUP;
+            qwen_mark_session_unready();
+            break;
+        case ERROR:
+            is_session_create = false;
+            current_state = STATE_WAITING_WAKEUP;
+            qwen_mark_session_unready();
             break;
         case DATA_TEXT:
         // ESP_LOGI(TAG, "text_data_len:%d", event->data_len);
             if(event->data==NULL)
             {
                 ESP_LOGE(TAG, "event_data_error");
+                break;
             }
             if(play_buffer==NULL)
             {
                 ESP_LOGE(TAG, "play_buffer_error");
+                break;
+            }
+            if(event->data_len==0)
+            {
+                ESP_LOGE(TAG, "event_data_len_error");
+                break;
+            }
+            if(websocket_queue==NULL)
+            {
+                ESP_LOGE(TAG, "websocket_queue_error");
+                break;
+            }
+            if(event->payload_len <= 0 ||
+               event->payload_offset < 0 ||
+               event->payload_offset > event->payload_len ||
+               event->data_len > (size_t)(event->payload_len - event->payload_offset) ||
+               (size_t)event->payload_len > QWEN_RX_JSON_BUFFER_SIZE)
+            {
+                ESP_LOGE(TAG, "drop invalid ws payload len:%d offset:%d data_len:%d",
+                         event->payload_len,
+                         event->payload_offset,
+                         (int)event->data_len);
+                break;
             }
             struct EventData queue_event;
             queue_event.type=event->type;
@@ -170,6 +267,7 @@ void bsp_user_event_callback(const struct EventData* event)
             if(queue_event.data==NULL)
             {
                 ESP_LOGE(TAG, "malloc error");
+                break;
             }
             memcpy(queue_event.data,event->data,event->data_len);
             BaseType_t ret=xQueueSend(websocket_queue, &queue_event, 0);
@@ -238,7 +336,7 @@ void qwen_message_handle_task(void *arg) {
             {
                 //ESP_LOGI(TAG,"receive:%s",queue_data.data);
                 event_type=-1;  //根据这个值判断不同的事件，-1表示错误
-                cJSON *root=cJSON_Parse((const char*)queue_data.data);
+                cJSON *root=cJSON_ParseWithLength((const char*)queue_data.data, queue_data.data_len);
                 if(root==NULL)
                 {
                     ESP_LOGE(TAG, "queue_data:JSON 解析失败");
@@ -264,7 +362,7 @@ void qwen_message_handle_task(void *arg) {
                         case session_created:
                             is_session_create=true;
                             ESP_LOGI(TAG, "Session created");
-                            ESP_LOGE(TAG,"%s",queue_data.data);
+                            ESP_LOGE(TAG, "%.*s", (int)queue_data.data_len, (char *)queue_data.data);
                             break;
                         case session_updated:
                             ESP_LOGI(TAG, "Session updated");
@@ -288,7 +386,7 @@ void qwen_message_handle_task(void *arg) {
                             cJSON *transcript = cJSON_GetObjectItem(root, "transcript");
                             if(cJSON_IsString(transcript))
                             {
-                                chatcreen_create_chat(2*systerm_conversation_index,transcript->valuestring);
+                                ui_post_chat_create(2*systerm_conversation_index,transcript->valuestring);
                                 ESP_LOGE(TAG, "\n\ninput:%s\n\n",transcript->valuestring);
                             }
                             ESP_LOGI(TAG, "Input transcription completed");
@@ -299,6 +397,7 @@ void qwen_message_handle_task(void *arg) {
                         case response_created:
                             ESP_LOGI(TAG, "Response created");  //对话建立
                             ring_buffer_write_count=0;          //清空音频数据buffer
+                            response_chat_created=false;
                             
                             break;
                         case response_done:
@@ -365,12 +464,27 @@ void qwen_message_handle_task(void *arg) {
             }
             else    //数据进行了分片，需要拼接之后才能组成完整数据，进行json解析，往往为音频原始数据
             {
+                if (queue_data.data == NULL ||
+                    queue_data.payload_len <= 0 ||
+                    queue_data.payload_offset < 0 ||
+                    queue_data.data_len == 0 ||
+                    queue_data.payload_offset > queue_data.payload_len ||
+                    queue_data.data_len > (size_t)(queue_data.payload_len - queue_data.payload_offset) ||
+                    (size_t)queue_data.payload_len > QWEN_RX_JSON_BUFFER_SIZE) {
+                    ESP_LOGE(TAG, "invalid ws fragment len:%d offset:%d data_len:%d",
+                             queue_data.payload_len,
+                             queue_data.payload_offset,
+                             (int)queue_data.data_len);
+                    free(queue_data.data);
+                    continue;
+                }
+
                 memcpy(play_buffer+queue_data.payload_offset,queue_data.data,queue_data.data_len);
                 free(queue_data.data);  //释放队列中data指针指向的内存
                 if(queue_data.payload_offset+queue_data.data_len==queue_data.payload_len)   //这里代表一个完整的帧合并完成
                 {
                     event_type=-1;  //根据这个值判断不同的事件，-1表示错误
-                    cJSON *root=cJSON_Parse((const char*)play_buffer);
+                    cJSON *root=cJSON_ParseWithLength((const char*)play_buffer, queue_data.payload_len);
 
                     if(root==NULL)
                     {
@@ -391,7 +505,18 @@ void qwen_message_handle_task(void *arg) {
                             //    ESP_LOGE(TAG,"audio_len:%d",strlen(audio_delta->valuestring));   //20480字节的音频base64编码数据
                                size_t decode_len=0;
 
-                               bsp_enc_dec_decode_base64(audio_delta->valuestring,strlen(audio_delta->valuestring),play_buffer_dec,20680,&decode_len);
+                               esp_err_t decode_ret = bsp_enc_dec_decode_base64(audio_delta->valuestring,
+                                                                                strlen(audio_delta->valuestring),
+                                                                                play_buffer_dec,
+                                                                                QWEN_AUDIO_PCM_BUFFER_SIZE,
+                                                                                &decode_len);
+                               if (decode_ret != ESP_OK || decode_len == 0) {
+                                   ESP_LOGE(TAG, "audio base64 decode failed:%d len:%d",
+                                            decode_ret,
+                                            (int)strlen(audio_delta->valuestring));
+                                   cJSON_Delete(root);
+                                   continue;
+                               }
                                //ESP_LOGE(TAG,"audio_len:%d",decode_len);   //解码后的数据长度
                                //bsp_8311_write(play_buffer_dec,decode_len);
                                size_t write_len=bsp_ring_buffer_write(audio_ring_buffer,play_buffer_dec,decode_len);
@@ -416,6 +541,9 @@ void qwen_message_handle_task(void *arg) {
         //vTaskDelay(pdMS_TO_TICKS(2));
     }
 }
+#define chatcreen_create_chat ui_post_chat_create
+#define chatcreen_chat_add_text ui_post_chat_append
+
 void play_task(void *arg)
 {
     ESP_LOGI(TAG, "play_task start");
@@ -427,9 +555,10 @@ void play_task(void *arg)
         //ESP_LOGE(TAG,"play_task");
         if(ring_buffer_write_count<=10) 
         {
-            if(ring_buffer_write_count==10) //第十次语音数据，第5s时
+            if(ring_buffer_write_count==10 && response_chat_created==false) //第十次语音数据，第5s时
             {
                 chatcreen_create_chat(2*systerm_conversation_index+1,NULL); //创建消息回复对话框，随着消息对话框的创建，这里会消耗较多的栈内存
+                response_chat_created=true;
             }
             vTaskDelay(pdMS_TO_TICKS(18)); 
             
@@ -471,7 +600,7 @@ void play_task(void *arg)
         }
         if(read_len!=640)
         {
-            //ESP_LOGE(TAG,"ring_buffer read:%d",read_len);
+            ESP_LOGE(TAG,"ring_buffer read:%d",read_len);
         }
         if(read_len!=0)
         {
@@ -486,6 +615,9 @@ void play_task(void *arg)
 }
 void lcd_show_task(void *arg)
 {
+#undef chatcreen_create_chat
+#undef chatcreen_chat_add_text
+
     ESP_LOGI(TAG,"LCD_SHOW_TASK start");
     // lv_obj_t *canvas1=NULL;
     // canvas1 = lv_canvas_create(lv_scr_act());
@@ -499,6 +631,8 @@ void lcd_show_task(void *arg)
     uint8_t is_car_flag=false;
     while(1)
     {
+        ui_process_pending_commands();
+
         EventBits_t uxBits = xEventGroupWaitBits(system_event_group,      // 事件组句柄
                                                  system_event_main |system_event_camera|system_event_chat|system_event_opencamera|system_event_car, // 等待的位
                                                  pdFALSE,           // 退出时清除这些位
@@ -635,7 +769,7 @@ void lcd_show_task(void *arg)
         // lvgl_port_unlock(); 
         // vTaskDelay(pdMS_TO_TICKS(1000));
         //esp_camera_fb_return(fb);
-        vTaskDelay(pdMS_TO_TICKS(30));
+        vTaskDelay(pdMS_TO_TICKS(15));
     }
 }
 void print_memory_info() {
@@ -710,9 +844,9 @@ void app_main(void)
     system_event_group = xEventGroupCreate(); 
         // 创建二值信号量
     play_semaphore = xSemaphoreCreateBinary();//同步播放任务
-    play_buffer = heap_caps_malloc(20680, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    play_buffer_dec=heap_caps_malloc(20680, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if(play_buffer==NULL)
+    play_buffer = heap_caps_malloc(QWEN_RX_JSON_BUFFER_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    play_buffer_dec=heap_caps_malloc(QWEN_AUDIO_PCM_BUFFER_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if(play_buffer==NULL || play_buffer_dec==NULL)
     {
         ESP_LOGE(TAG,"buffer_malloc_failed");
     }
@@ -722,6 +856,11 @@ void app_main(void)
     if(websocket_queue==NULL)
     {
         ESP_LOGE(TAG,"websocket queue create failed");
+    }
+    ui_queue=xQueueCreate(UI_QUEUE_LENGTH,sizeof(ui_chat_cmd_t));
+    if(ui_queue==NULL)
+    {
+        ESP_LOGE(TAG,"ui queue create failed");
     }
     //初始化websocket协议
     ESP_ERROR_CHECK(bsp_websocket_init(websocket_url,api_key));
@@ -779,7 +918,7 @@ void app_main(void)
     {
         ESP_LOGE(TAG,"play_task_create_failed");
     }
-    if(xTaskCreatePinnedToCore(lcd_show_task, "lcd_show_task", 4096, NULL, 3, NULL, 0)!=pdPASS)
+    if(xTaskCreatePinnedToCore(lcd_show_task, "lcd_show_task", 5*1024, NULL, 3, NULL, 0)!=pdPASS)
     {
         ESP_LOGE(TAG,"lcd_show_task_create_failed");
     }
@@ -821,9 +960,9 @@ void app_main(void)
         memset(CPU_RunInfo, 0, 1000);
         vTaskGetRunTimeStats((char *)CPU_RunInfo);
  
-        ESP_LOGI(TAG,"task_name      run_cnt                 usage_rate   \r\n");
-        ESP_LOGI(TAG,"%s", CPU_RunInfo);
-        ESP_LOGI(TAG,"----------------------------------------------------\r\n");
+        // ESP_LOGI(TAG,"task_name      run_cnt                 usage_rate   \r\n");
+        // ESP_LOGI(TAG,"%s", CPU_RunInfo);
+        // ESP_LOGI(TAG,"----------------------------------------------------\r\n");
 
         // bsp_8311_read(read_buffer,640);
         // bsp_enc_dec_encode_base64((uint8_t *)read_buffer,640,read_buffer_encode,857,&encode_len);  //原始PCM数据编码成base64

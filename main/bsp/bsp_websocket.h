@@ -35,8 +35,8 @@ struct EventData {
 typedef void (*EventCallbackFunc)(const struct EventData* event);
 extern EventCallbackFunc event_callback_;
 esp_err_t bsp_websocket_init(const char *ws_url,const char *ws_api_key);
-int bsp_websocket_send_text(const char* text,uint16_t length,int timeout_ms);
-int bsp_websocket_send_bin(const char* data, uint32_t length, int timeout_ms);
+int bsp_websocket_send_text(const char* text, int length, int timeout_ms);
+int bsp_websocket_send_bin(const char* data, int length, int timeout_ms);
 
 bool bsp_websocket_is_connected(void);
 

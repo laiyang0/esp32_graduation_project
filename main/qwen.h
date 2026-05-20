@@ -67,7 +67,7 @@ static const char * const qwen_server_event_str[22] = {
     "session.updated",                       // 2
     "input_audio_buffer.speech_started",     // 3
     "input_audio_buffer.speech_stopped",     // 4
-    "input_audio_buffe.committed",          // 5
+    "input_audio_buffer.committed",          // 5
     "input_audio_buffer.cleared",            // 6
     "conversation.item.created",             // 7
     "conversation.item.input_audio_transcription.completed",     // 8
@@ -88,6 +88,7 @@ static const char * const qwen_server_event_str[22] = {
 
 esp_err_t qwen_init(void);
 esp_err_t qwen_send_audio(const char * audio_date,int len);
+void qwen_mark_session_unready(void);
 
 
 
