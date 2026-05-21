@@ -45,7 +45,7 @@ static srmodel_list_t           *models         = NULL;
 static bsp_ring_buffer_t *audio_read_buffer=NULL;      //存储麦克风原始音频的环形缓冲区
 static EventGroupHandle_t    audio_qianwen_eventgroup=NULL;  //音频是否发送到千问事件组
 static SemaphoreHandle_t mic_read_mutex = NULL;
-static SemaphoreHandle_t mic_read_mutex = NULL;
+// static SemaphoreHandle_t mic_read_mutex = NULL;
 // esp_afe_sr_data_t *afe_data;
 
 #define AUDIO_WRITE_IN_RB_BIT   BIT0    //视频数据是否写入环形缓冲区的标志位
@@ -102,7 +102,6 @@ static void audio_feed_task(void *pvParam)
         {
             if(app_sr_mic_read(audio_buffer,audio_chunksize*sizeof(int16_t)) != ESP_OK)    //读出初始的音频数据
             {
-            {
                 ESP_LOGE(TAG,"audio feed read fail");
                 vTaskDelay(pdMS_TO_TICKS(10));
                 continue;
@@ -113,7 +112,8 @@ static void audio_feed_task(void *pvParam)
                 audio_buffer[i * 2 + 0] = audio_buffer[i];
             }
             afe_handle->feed(afe_data, audio_buffer);
-            }
+        }
+
         //if(xEventGroupWaitBits(audio_qianwen_eventgroup,AUDIO_WRITE_IN_RB_BIT,pdFALSE,pdFALSE,0)&AUDIO_WRITE_IN_RB_BIT)   //
         if(is_connect_qianwen)
         {
@@ -139,7 +139,6 @@ static void audio_feed_task(void *pvParam)
 
         //vTaskDelay(pdMS_TO_TICKS(30));
     }
-
 }
 static void audio_detect_task(void *pvParam)
 {
@@ -292,7 +291,6 @@ static void audio_qianwen_task(void *pvParam)
     size_t encode_len=0;
     char *read_buffer = heap_caps_malloc(QWEN_AUDIO_CHUNK_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);      //读出的原始音频数据
     char *read_buffer_encode=heap_caps_malloc(QWEN_AUDIO_B64_BYTES,MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);//base64编码后的字符数据
-    char *read_buffer_encode=heap_caps_malloc(QWEN_AUDIO_B64_BYTES,MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if(read_buffer == NULL || read_buffer_encode == NULL)
     {
         ESP_LOGE(TAG,"audio qwen buffer malloc failed");
@@ -321,7 +319,6 @@ static void audio_qianwen_task(void *pvParam)
             //     qwen_send_audio(read_buffer_encode,encode_len);
             // }
             if(app_sr_mic_read(read_buffer,QWEN_AUDIO_CHUNK_BYTES)!=ESP_OK)    //读出初始的音频数据
-            {
             {
                 ESP_LOGE(TAG,"read fail");
                 continue;

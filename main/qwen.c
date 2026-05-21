@@ -1,8 +1,8 @@
 #include "qwen.h"
+#include <string.h>
 #include "esp_log.h"
 #include "cJSON.h"
 #include "bsp_websocket.h"
-#include "mbedtls/base64.h"
 
 
 // 千问实时语音API地址
@@ -13,6 +13,12 @@ const char *api_key ="";
 
 
 static const char *TAG="qwen";
+static bool s_qwen_session_ready = false;
+
+void qwen_mark_session_unready(void)
+{
+    s_qwen_session_ready = false;
+}
 
 esp_err_t qwen_init(void)
 {
@@ -56,13 +62,21 @@ esp_err_t qwen_init(void)
     cJSON_AddStringToObject(session, "voice", "Cherry");
     cJSON_AddStringToObject(session, "input_audio_format", "pcm");
     cJSON_AddStringToObject(session, "output_audio_format", "pcm");
-    cJSON_AddStringToObject(session, "instructions", "你是一个五星酒店的女服务员，请准确且友好地解答客户关于房型、设施、价格、预订政策的咨询。请始终以专业和乐于助人的态度回应，杜绝提供未经证实或超出酒店服务范围的信息。");
+    cJSON *input_audio_transcription = cJSON_CreateObject();
+    if (!input_audio_transcription) {
+        cJSON_Delete(root);
+        ESP_LOGE(TAG,"CJSON create object failed");
+        return ESP_FAIL;
+    }
+    cJSON_AddStringToObject(input_audio_transcription, "model", "gummy-realtime-v1");
+    cJSON_AddItemToObject(session, "input_audio_transcription", input_audio_transcription);
+    cJSON_AddStringToObject(session, "instructions", "你是一个桌面级的陪护聊天机器人,请你回答我的问题吧");
     
        // 创建 turn_detection 对象
     cJSON *turn_detection = cJSON_CreateObject();
     cJSON_AddStringToObject(turn_detection, "type", "server_vad");
     cJSON_AddNumberToObject(turn_detection, "threshold", 0.5);
-    cJSON_AddNumberToObject(turn_detection, "silence_duration_ms", 800);
+    cJSON_AddNumberToObject(turn_detection, "silence_duration_ms", 500);
     cJSON_AddItemToObject(session, "turn_detection", turn_detection);
 
     // cJSON_AddBoolToObject(session, "enable_search", true);
@@ -83,24 +97,43 @@ esp_err_t qwen_init(void)
     char *json_string = cJSON_PrintUnformatted(root);
     if(json_string)
     {
-        //bsp_websocket_send_text(json_string,sizeof(json_string),1000);
         ESP_LOGI(TAG, "json_string: %s", json_string);
+        if (bsp_websocket_send_text(json_string, strlen(json_string), 5000) < 0) {
+            ESP_LOGE(TAG, "send session.update failed");
+            s_qwen_session_ready = false;
+            cJSON_free(json_string);
+            cJSON_Delete(root);
+            return ESP_FAIL;
+        }
         cJSON_free(json_string);
     }
 
     cJSON_Delete(root);
+    s_qwen_session_ready = true;
     return ESP_OK;
 }
 //base64编码文件，组合成json文件发出
 esp_err_t qwen_send_audio(const char * audio_date,int len)
 {
+    if (audio_date == NULL || len <= 0) {
+        ESP_LOGE(TAG, "invalid audio data");
+        return ESP_FAIL;
+    }
+
     if(bsp_websocket_is_connected()==true)
     {
 
     }
     else{
         ESP_LOGE(TAG, "websocket is not connected");
+        s_qwen_session_ready = false;
         return ESP_FAIL;
+    }
+    if (!s_qwen_session_ready) {
+        if (qwen_init() != ESP_OK) {
+            ESP_LOGE(TAG, "qwen session update failed");
+            return ESP_FAIL;
+        }
     }
      // 创建根对象
     cJSON *root = cJSON_CreateObject();
@@ -114,7 +147,13 @@ esp_err_t qwen_send_audio(const char * audio_date,int len)
     char *json_string = cJSON_PrintUnformatted(root);
     if(json_string)
     {
-        bsp_websocket_send_text(json_string,strlen(json_string),1000);
+        if (bsp_websocket_send_text(json_string, strlen(json_string), 5000) < 0) {
+            ESP_LOGE(TAG, "send audio failed");
+            s_qwen_session_ready = false;
+            cJSON_free(json_string);
+            cJSON_Delete(root);
+            return ESP_FAIL;
+        }
         cJSON_free(json_string);    //一定要释放该内存，该指针指向的字符串是由malloc申请的
         // ESP_LOGI(TAG, "json_string: %s", json_string);
         
