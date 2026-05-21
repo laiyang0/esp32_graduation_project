@@ -75,7 +75,7 @@ esp_err_t qwen_init(void)
        // 创建 turn_detection 对象
     cJSON *turn_detection = cJSON_CreateObject();
     cJSON_AddStringToObject(turn_detection, "type", "server_vad");
-    cJSON_AddNumberToObject(turn_detection, "threshold", 0.5);
+    cJSON_AddNumberToObject(turn_detection, "threshold", 0.2);
     cJSON_AddNumberToObject(turn_detection, "silence_duration_ms", 500);
     cJSON_AddItemToObject(session, "turn_detection", turn_detection);
 
