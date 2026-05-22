@@ -22,6 +22,8 @@ lv_obj_t *chat_textarea[chat_index_max]={NULL,NULL,NULL,NULL};
 
 //控制页面所有对象
 lv_obj_t *controlscreen=NULL;               //小车控制页面对象指针
+//音乐页面所有对象
+lv_obj_t *musicscreen=NULL;
 
 static const char *TAG="ui_init";
 

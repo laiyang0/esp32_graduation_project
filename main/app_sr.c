@@ -36,6 +36,9 @@ extern const int system_event_car_forward;   //前进
 extern const int system_event_car_backward;   //后退
 extern const int system_event_car_left;       //左转
 extern const int system_event_car_right;      //右转
+extern const int system_event_music_mode;      //音乐模式
+extern const int system_event_music_bofang;      //播放音乐
+extern const int system_event_music_zanting;      //暂停音乐
 
 static model_iface_data_t       *model_data     = NULL;
 static const esp_mn_iface_t     *multinet       = NULL;
@@ -60,14 +63,14 @@ const char *cmd_phoneme[12] = { //命令词列表
     "zi pai mo shi",
     "dui hua mo shi",
     "yun dong mo shi",
-    "ting zhi",
+    "ting che",
     "qian jin",
     "hou tui",
     "zuo zhuan",
     "you zhuan",
-    "ting zhi bo fang",
-    "da kai shi jian",
-    "da kai ri li"
+    "yin yue mo shi",
+    "bo fang",
+    "zan ting"
 };
 
 static esp_err_t app_sr_mic_read(void *buffer, int len)

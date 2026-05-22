@@ -17,15 +17,18 @@ idf_component_register(
         "./ui/screens/ui_chat.c"
         "./ui/screens/ui_start.c"
         "./ui/screens/ui_control.c"
+        "./ui/screens/ui_music.c"
         "mmap.c"
         "app_sr.c"
         "qwen.c"
+        "music_player.c"
     INCLUDE_DIRS "."
         "./bsp"
         "./ui"
         "./ui/fonts"
     REQUIRES esp_driver_i2s
             esp_driver_i2c
+            espressif__esp_audio_codec
             # espressif__esp_codec_dev
                 
                 nvs_flash

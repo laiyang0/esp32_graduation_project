@@ -37,6 +37,7 @@
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 #include "lv_demos.h"
+#include "music_player.h"
 
 #include "esp_camera.h"
 #include <dirent.h>
@@ -61,6 +62,9 @@ const int system_event_car_forward=BIT6;   //前进
 const int system_event_car_backward=BIT7;   //后退
 const int system_event_car_left=BIT8;       //左转
 const int system_event_car_right=BIT9;      //右转
+const int system_event_music_mode=BIT10;      //音乐模式
+const int system_event_music_bofang=BIT11;      //播放音乐
+const int system_event_music_zanting=BIT12;      //暂停音乐
 
 volatile bool response_done_flag=false; //服务器端的单次会话结束标识
 
@@ -629,12 +633,13 @@ void lcd_show_task(void *arg)
     //lv_scr_load(main_screen);                       // 加载并显示主屏幕
     //vTaskDelay(pdMS_TO_TICKS(2000));
     uint8_t is_car_flag=false;
+    uint8_t is_music_flag=false;
     while(1)
     {
         ui_process_pending_commands();
 
         EventBits_t uxBits = xEventGroupWaitBits(system_event_group,      // 事件组句柄
-                                                 system_event_main |system_event_camera|system_event_chat|system_event_opencamera|system_event_car, // 等待的位
+                                                 system_event_main |system_event_camera|system_event_chat|system_event_opencamera|system_event_car|system_event_music_mode, // 等待的位
                                                  pdFALSE,           // 退出时清除这些位
                                                  pdFALSE,           // 等待所有位
                                                  0);   // 非阻塞
@@ -648,6 +653,7 @@ void lcd_show_task(void *arg)
                 xEventGroupClearBits(system_event_group, system_event_opencamera);//关闭摄像头设备
             }
             is_car_flag=false;
+            is_music_flag=false;
             bsp_communication_write_command(BSP_COMMNUICATION_STOP);
             ESP_LOGE(TAG,"MAIN_RUNNING");
         }
@@ -660,6 +666,7 @@ void lcd_show_task(void *arg)
                 xEventGroupClearBits(system_event_group, system_event_camera);
             }
             is_car_flag=false;
+            is_music_flag=false;
             bsp_communication_write_command(BSP_COMMNUICATION_STOP);
             ESP_LOGE(TAG,"CAMERA_RUNNING");
         }
@@ -673,6 +680,7 @@ void lcd_show_task(void *arg)
                 xEventGroupClearBits(system_event_group, system_event_opencamera);//关闭摄像头设备
             }
             is_car_flag=false;
+            is_music_flag=false;
             bsp_communication_write_command(BSP_COMMNUICATION_STOP);
             ESP_LOGE(TAG,"CHAT_RUNNING");
         }
@@ -684,9 +692,23 @@ void lcd_show_task(void *arg)
                 lvgl_port_unlock(); 
                 xEventGroupClearBits(system_event_group, system_event_car);
                 is_car_flag=true;
+                is_music_flag=false;
                 ESP_LOGE(TAG,"MOVING_RUNNING");
                 xEventGroupClearBits(system_event_group, system_event_opencamera);//关闭摄像头设备
             }
+        }
+        if(uxBits&system_event_music_mode)
+        {
+            if(lvgl_port_lock(0))
+            {
+                lv_scr_load(musicscreen);
+                lvgl_port_unlock(); 
+                is_music_flag=true;
+                xEventGroupClearBits(system_event_group, system_event_music_mode);
+                xEventGroupClearBits(system_event_group, system_event_opencamera);//关闭摄像头设备
+            }
+            is_car_flag=false;
+            bsp_communication_write_command(BSP_COMMNUICATION_STOP);
         }
         if(uxBits&system_event_opencamera)  //打开摄像头
         {
@@ -749,7 +771,27 @@ void lcd_show_task(void *arg)
                 xEventGroupClearBits(system_event_group,system_event_car_right);
             }
         }
-
+        if(is_music_flag)
+        {
+            uxBits = xEventGroupWaitBits(system_event_group,      // 事件组句柄
+                                        system_event_music_bofang|system_event_music_zanting, // 等待的位
+                                        pdFALSE,           // 退出时清除这些位
+                                        pdFALSE,           // 等待所有位
+                                        0);   // 非阻塞
+            if(uxBits&system_event_music_bofang)
+            {
+                if(music_player_is_playing()==false)
+                {
+                    music_player_play(1);
+                }
+                xEventGroupClearBits(system_event_group, system_event_music_bofang);
+            }
+            if(uxBits&system_event_music_zanting)
+            {
+                music_player_stop();
+                xEventGroupClearBits(system_event_group,system_event_music_zanting);
+            }
+        }
 
         
         // lv_canvas_set_buffer(canvas1, fb->buf, fb->width, fb->height, LV_COLOR_FORMAT_RGB565);
@@ -828,10 +870,13 @@ void app_main(void)
     camerascreen=camerascreen_create();     //创建camera页面
     chatscreen=chatcreen_create();          //创建chat页面
     controlscreen=controlscreen_create();    //创建control页面
+    musicscreen=musicscreen_create();        //创建Music页面
 
 
     lvgl_port_lock(portMAX_DELAY);
     lv_scr_load(startscreen);
+    //lv_scr_load(musicscreen);
+    
     lvgl_port_unlock();
 
 
@@ -908,7 +953,7 @@ void app_main(void)
 
     qwen_init();
     app_sr_init();  //初始化语音模块
-
+    music_player_init();//初始化音乐播放器
     print_memory_info();
     if(xTaskCreatePinnedToCore(qwen_message_handle_task, "qwen_message_handle_task", 4096, NULL, 20, NULL, 1)!=pdPASS)
     {
@@ -947,6 +992,8 @@ void app_main(void)
     else{
         ESP_LOGE(TAG,"lvgl_port_lock_failed");
     }
+    
+    
     uint8_t *CPU_RunInfo= heap_caps_malloc(1000, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);;
     while(1)
     {
