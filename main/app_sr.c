@@ -50,7 +50,7 @@ static SemaphoreHandle_t mic_read_mutex = NULL;
 
 #define AUDIO_WRITE_IN_RB_BIT   BIT0    //视频数据是否写入环形缓冲区的标志位
 #define AUDIO_QWEN_BIT          BIT1    //音频数据是否发送到千问的标志位
-#define QWEN_AUDIO_CHUNK_BYTES  3200
+#define QWEN_AUDIO_CHUNK_BYTES  1600
 #define QWEN_AUDIO_B64_BYTES    ((((QWEN_AUDIO_CHUNK_BYTES) + 2) / 3) * 4 + 1)
 
 static volatile bool is_connect_qianwen =false;  //是否连接千问的标志位

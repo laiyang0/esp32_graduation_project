@@ -29,7 +29,7 @@ static bool mainscreen_gif_set_src(uint8_t gif_index)
         return false;
     }
 
-    if (gif_index >= MMAP_GIFS_FILES) {
+    if (gif_index >= (MMAP_GIFS_FILES-2)) {
         gif_index = 0;
     }
 
@@ -69,7 +69,7 @@ static void mainscreen_gif_switch_next_async(void *user_data)
         return;
     }
 
-    uint8_t next_index = (s_main_gif_ctx.gif_index + 1) % MMAP_GIFS_FILES;
+    uint8_t next_index = (s_main_gif_ctx.gif_index + 1) % (MMAP_GIFS_FILES-2);
     if (mainscreen_gif_set_src(next_index)) {
         ESP_LOGI(TAG, "switch gif to index:%d", next_index);
     }

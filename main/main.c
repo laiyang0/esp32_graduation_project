@@ -572,12 +572,33 @@ void play_task(void *arg)
             {
                 text_time_count=0;
                 memset(text_data,0,4);
-                uint8_t read_text_len=bsp_ring_buffer_read(text_ring_buffer,text_data,3); //计算得出每0.22s，即220ms播放一个字
-                if(read_text_len==3)    //成功读取到一个/两个字
+                uint8_t read_text_len=bsp_ring_buffer_read(text_ring_buffer,text_data,1); //计算得出每0.22s，即220ms播放一个字
+                if(read_text_len==1)    //成功读取
                 {
-                    //ESP_LOGE(TAG,"text_data:%s",text_data);
-                    chatcreen_chat_add_text(2*systerm_conversation_index+1,(char *)text_data); //向本次的对话回复框写入数据
+                    if(text_data[0]<0x80)   //英文字符
+                    {
+                        text_data[1]=0;
+                        text_data[2]=0;
+                        text_data[3]=0;
+                        chatcreen_chat_add_text(2*systerm_conversation_index+1,(char *)text_data); //向本次的对话回复框写入数据
+                    }
+                    else{
+                        text_data[3]=0;
+                        read_text_len=bsp_ring_buffer_read(text_ring_buffer,&text_data[1],2);
+                        if(read_text_len==2)
+                        {
+                            chatcreen_chat_add_text(2*systerm_conversation_index+1,(char *)text_data); //向本次的对话回复框写入数据
+                        }
+
+                    }
+                        
+
                 }
+                // if(read_text_len==3)    //成功读取到一个/两个字
+                // {
+                //     //ESP_LOGE(TAG,"text_data:%s",text_data);
+                //     chatcreen_chat_add_text(2*systerm_conversation_index+1,(char *)text_data); //向本次的对话回复框写入数据
+                // }
                 else if(read_text_len==0&&response_done_flag)   //这里表示单次对话结束，并且text_ring_buff的数据读完
                 {
                     // bsp_ring_buffer_deinit(text_ring_buffer);   //释放该环形缓冲区
@@ -600,7 +621,7 @@ void play_task(void *arg)
         }
         if(read_len!=640)
         {
-            ESP_LOGE(TAG,"ring_buffer read:%d",read_len);
+            //ESP_LOGE(TAG,"ring_buffer read:%d",read_len);
         }
         if(read_len!=0)
         {
@@ -773,11 +794,11 @@ void lcd_show_task(void *arg)
     }
 }
 void print_memory_info() {
-    ESP_LOGE(TAG,"Free heap: %d bytes", esp_get_free_heap_size());
-    ESP_LOGE(TAG,"Internal Free heap: %d bytes", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
-    ESP_LOGE(TAG,"Internal total heap: %d bytes", heap_caps_get_total_size(MALLOC_CAP_INTERNAL));
-    ESP_LOGE(TAG,"Largest free block: %d bytes", heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
-    ESP_LOGE(TAG,"Free DMA memory: %d bytes", heap_caps_get_free_size(MALLOC_CAP_DMA));
+    ESP_LOGI(TAG,"Free heap: %d bytes", esp_get_free_heap_size());
+    ESP_LOGI(TAG,"Internal Free heap: %d bytes", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    ESP_LOGI(TAG,"Internal total heap: %d bytes", heap_caps_get_total_size(MALLOC_CAP_INTERNAL));
+    ESP_LOGI(TAG,"Largest free block: %d bytes", heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+    ESP_LOGI(TAG,"Free DMA memory: %d bytes", heap_caps_get_free_size(MALLOC_CAP_DMA));
     // heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
 }
 #include "mmap_generate_gifs.h"
@@ -964,12 +985,6 @@ void app_main(void)
         // ESP_LOGI(TAG,"%s", CPU_RunInfo);
         // ESP_LOGI(TAG,"----------------------------------------------------\r\n");
 
-        // bsp_8311_read(read_buffer,640);
-        // bsp_enc_dec_encode_base64((uint8_t *)read_buffer,640,read_buffer_encode,857,&encode_len);  //原始PCM数据编码成base64
-        // ESP_LOGE(TAG,"encode_len:%d",encode_len);
-        //                 qwen_send_audio(read_buffer_encode,encode_len);
-        // UBaseType_t high_water_mark_words = uxTaskGetStackHighWaterMark(NULL);
-        // ESP_LOGE(TAG,"main_words:%d",high_water_mark_words);
         //print_memory_info();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
